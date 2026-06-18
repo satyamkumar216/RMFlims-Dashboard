@@ -36,8 +36,8 @@ export default function DiagnosticsPage() {
     // Check 1: Environment variables
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    const urlPresent = !!url && url !== '' && !url.includes('your-project-id')
-    const keyPresent = !!key && key !== '' && key !== 'your-anon-key-here'
+    const urlPresent = !!url && url !== '' && !url.includes('your-project-id') && !url.includes('your-project-url') && !url.includes('placeholder')
+    const keyPresent = !!key && key !== '' && key !== 'your-anon-key-here' && key !== 'your-supabase-anon-key' && key !== 'placeholder'
 
     if (urlPresent && keyPresent) {
       results[0] = { label: 'Environment variables are present', status: 'pass', detail: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are both set' }

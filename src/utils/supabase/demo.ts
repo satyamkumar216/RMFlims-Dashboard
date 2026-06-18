@@ -64,7 +64,13 @@ export interface DemoBooking {
 
 export function isDemoMode() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  return !url || url.includes('your-project-url') || url === ''
+  return (
+    !url || 
+    url.includes('your-project-url') || 
+    url.includes('your-project-id') || 
+    url.includes('placeholder') || 
+    url === ''
+  )
 }
 
 const defaultEnquiries: DemoEnquiry[] = [
