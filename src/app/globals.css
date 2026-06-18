@@ -1,26 +1,89 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #F0F4F8;
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --card-border: #E8ECF0;
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --header-bg: rgba(255, 255, 255, 0.85);
+  --header-border: #E8ECF0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --table-header-bg: #f1f5f9;
+  --table-row-hover: rgba(241, 245, 249, 0.7);
+  --cell-border: #E8ECF0;
+  --modal-bg: #ffffff;
+  --sidebar-active: #f1f5f9;
+  --shadow-color: rgba(0, 0, 0, 0.04);
+}
+
+.dark {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card-bg: rgba(24, 24, 27, 0.45);
+  --card-border: rgba(39, 39, 42, 0.6);
+  --input-bg: #18181b;
+  --input-border: #27272a;
+  --header-bg: rgba(9, 9, 11, 0.5);
+  --header-border: rgba(39, 39, 42, 0.8);
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #52525b;
+  --table-header-bg: rgba(24, 24, 27, 0.6);
+  --table-row-hover: rgba(24, 24, 27, 0.35);
+  --cell-border: rgba(39, 39, 42, 0.3);
+  --modal-bg: #09090b;
+  --sidebar-active: rgba(39, 39, 42, 0.4);
+  --shadow-color: rgba(0, 0, 0, 0.3);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg-base: var(--background);
+  --color-text-base: var(--foreground);
+  --color-card-base: var(--card-bg);
+  --color-border-base: var(--card-border);
+  --color-input-base: var(--input-bg);
+  --color-input-border: var(--input-border);
+  --color-header-base: var(--header-bg);
+  --color-header-border: var(--header-border);
+  --color-txt-primary: var(--text-primary);
+  --color-txt-secondary: var(--text-secondary);
+  --color-txt-muted: var(--text-muted);
+  --color-tbl-header: var(--table-header-bg);
+  --color-tbl-hover: var(--table-row-hover);
+  --color-cell-border: var(--cell-border);
+  --color-modal-base: var(--modal-bg);
+  --color-sidebar-active: var(--sidebar-active);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  
+  --shadow-base: 0 1px 3px var(--shadow-color), 0 1px 2px var(--shadow-color);
+  --shadow-md-base: 0 4px 6px -1px var(--shadow-color), 0 2px 4px -1px var(--shadow-color);
+  --shadow-lg-base: 0 10px 15px -3px var(--shadow-color), 0 4px 6px -2px var(--shadow-color);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
