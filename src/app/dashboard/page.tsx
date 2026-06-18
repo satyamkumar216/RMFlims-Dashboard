@@ -421,8 +421,11 @@ export default function EnquiriesPage() {
                           className="hover:bg-tbl-hover cursor-pointer transition-all duration-150 border-b border-cell-border last:border-b-0 hover:-translate-y-0.5 hover:shadow-sm"
                         >
                           <td className="px-6 py-4">
-                            <div className="font-bold text-txt-primary">{enquiry.name}</div>
-                            <div className="text-xs text-txt-muted mt-0.5">{enquiry.email}</div>
+                            <div className="font-bold text-txt-primary text-[15px] leading-tight">{enquiry.name}</div>
+                            {enquiry.phone && (
+                              <div className="text-sm font-semibold text-txt-secondary mt-0.5">{enquiry.phone}</div>
+                            )}
+                            <div className="text-[11px] text-txt-muted mt-0.5">{enquiry.email}</div>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2 text-txt-secondary font-medium">
@@ -461,7 +464,10 @@ export default function EnquiriesPage() {
                       <div className="flex items-start justify-between">
                         <div>
                           <h3 className="font-bold text-txt-primary text-base leading-tight">{enquiry.name}</h3>
-                          <p className="text-xs text-txt-muted mt-0.5">{enquiry.email}</p>
+                          {enquiry.phone && (
+                            <p className="text-sm font-semibold text-txt-secondary mt-0.5">{enquiry.phone}</p>
+                          )}
+                          <p className="text-[11px] text-txt-muted mt-0.5">{enquiry.email}</p>
                         </div>
                         <span className={`inline-flex items-center border ${getStatusBadge(enquiry.status)}`}>
                           {enquiry.status.replace('_', ' ')}
