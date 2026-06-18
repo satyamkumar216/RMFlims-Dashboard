@@ -407,6 +407,7 @@ export default function EnquiryDetailPage() {
               event_type: bookingType,
               event_date_start: dbStart,
               event_date_end: dbEnd || dbStart,
+              event_dates: eventDatesStr,
               location: location || '—',
               package: packageName,
               agreed_price: finalPrice,
@@ -1132,7 +1133,7 @@ export default function EnquiryDetailPage() {
                   <h4 className="text-xs font-bold uppercase tracking-wider text-txt-muted print:text-gray-400 mb-2">Shoot Details</h4>
                   <p className="font-semibold text-txt-primary print:text-black">Package: {packageName}</p>
                   <p className="text-txt-secondary dark:text-txt-muted print:text-gray-500 text-xs mt-1">
-                    Dates: {formatDateRangeText(eventDate, eventEndDate)}
+                    Dates: {formatMultiDates(eventDates)}
                   </p>
                   <p className="text-txt-secondary dark:text-txt-muted print:text-gray-500 text-xs mt-0.5">
                     Location: {location || '—'}
@@ -1142,19 +1143,19 @@ export default function EnquiryDetailPage() {
 
               {/* Items summary table */}
               <div className="border border-border-base print:border-gray-200 rounded-lg overflow-hidden mt-6">
-                <table className="w-full text-left border-collapse text-xs">
+                <table className="w-full text-left border-collapse text-sm">
                   <thead>
-                    <tr className="bg-tbl-header print:bg-gray-50 border-b border-border-base print:border-gray-200 font-bold text-txt-secondary print:text-gray-650 uppercase tracking-wider">
+                    <tr className="bg-sidebar-active print:bg-gray-50 border-b border-border-base print:border-gray-200 font-bold text-txt-secondary print:text-gray-600 uppercase tracking-wider text-xs">
                       <th className="px-4 py-3">Description</th>
                       <th className="px-4 py-3 text-right">Amount</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-cell-border print:divide-gray-100 font-medium text-txt-secondary print:text-gray-800 bg-card-base print:bg-white">
+                  <tbody className="divide-y divide-border-base print:divide-gray-100 font-medium text-txt-secondary print:text-gray-800">
                     <tr>
                       <td className="px-4 py-3">
-                        <span className="font-bold text-txt-primary print:text-black block">{packageName} Services</span>
-                        <span className="text-[10px] text-txt-muted print:text-gray-450 font-normal">
-                          Wedding Photography & Cinematography covering {formatDateRangeText(eventDate, eventEndDate)} in {location || 'General Venue'}.
+                        <span className="font-bold text-txt-primary print:text-black block">{bookingType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())} Shoot</span>
+                        <span className="text-[10px] text-txt-muted print:text-gray-400 font-normal">
+                          Photography/Cinematography services for {formatMultiDates(eventDates)} in {location || 'General Venue'}.
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-txt-primary print:text-black">

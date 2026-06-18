@@ -24,10 +24,10 @@ export async function generateUniqueReceiptNumber(
     localBookings.forEach(b => {
       if (b.receipt_number) {
         existingNumbers.add(b.receipt_number.trim().toUpperCase());
-        // Match RMF, XYZ, or INV prefixes, followed by year and numeric sequence
-        const match = b.receipt_number.match(/(RMF|XYZ|INV)-(\d+)-(\d+)/i);
-        if (match && Number(match[2]) === year) {
-          const num = Number(match[3]);
+        // Match old formats (RMF-..., XYZ-...) and new format (Year-No)
+        const match = b.receipt_number.match(/^(?:(?:RMF|XYZ|INV)-)?(\d{4})-(\d+)$/i);
+        if (match && Number(match[1]) === year) {
+          const num = Number(match[2]);
           if (num > maxNum) maxNum = num;
         }
       }
@@ -42,9 +42,9 @@ export async function generateUniqueReceiptNumber(
       allBookings.forEach(b => {
         if (b.receipt_number) {
           existingNumbers.add(b.receipt_number.trim().toUpperCase());
-          const match = b.receipt_number.match(/(RMF|XYZ|INV)-(\d+)-(\d+)/i);
-          if (match && Number(match[2]) === year) {
-            const num = Number(match[3]);
+          const match = b.receipt_number.match(/^(?:(?:RMF|XYZ|INV)-)?(\d{4})-(\d+)$/i);
+          if (match && Number(match[1]) === year) {
+            const num = Number(match[2]);
             if (num > maxNum) maxNum = num;
           }
         }
@@ -54,12 +54,12 @@ export async function generateUniqueReceiptNumber(
 
   // Generate the next sequential number, starting from maxNum + 1
   let nextNum = maxNum + 1;
-  let receiptNumber = `RMF-${year}-${nextNum}`;
+  let receiptNumber = `${year}-${nextNum}`;
 
   // Ensure absolute uniqueness by incrementing nextNum if it already exists in the set
   while (existingNumbers.has(receiptNumber.toUpperCase())) {
     nextNum++;
-    receiptNumber = `RMF-${year}-${nextNum}`;
+    receiptNumber = `${year}-${nextNum}`;
   }
 
   return receiptNumber;

@@ -11,6 +11,7 @@ import {
   saveDemoEvents 
 } from '@/utils/supabase/demo'
 import { generateUniqueReceiptNumber } from '@/utils/invoice'
+import { MultiDatePicker, parseEventDates, formatMultiDates } from '@/components/MultiDatePicker'
 import { 
   FileText, 
   Edit2, 
@@ -128,8 +129,7 @@ export default function BookingsPage() {
   const [editSpecialRequirements, setEditSpecialRequirements] = useState('')
   const [editBookingStatus, setEditBookingStatus] = useState<'confirmed' | 'in_progress' | 'tentative' | 'cancelled'>('confirmed')
   const [editAdminNotes, setEditAdminNotes] = useState('')
-  const [editStartDate, setEditStartDate] = useState('')
-  const [editEndDate, setEditEndDate] = useState('')
+  const [editEventDates, setEditEventDates] = useState<string[]>([])
   const [editPanelSaving, setEditPanelSaving] = useState(false)
 
   // Add Form Inputs State
@@ -138,8 +138,7 @@ export default function BookingsPage() {
   const [addPhone, setAddPhone] = useState('')
   const [addHowFound, setAddHowFound] = useState('Instagram')
   const [addEventType, setAddEventType] = useState('marriage')
-  const [addStartDate, setAddStartDate] = useState('')
-  const [addEndDate, setAddEndDate] = useState('')
+  const [addEventDates, setAddEventDates] = useState<string[]>([])
   const [addLocation, setAddLocation] = useState('')
   const [addPackage, setAddPackage] = useState('Full Wedding Photo+Video')
   const [addCustomPackageDetails, setAddCustomPackageDetails] = useState('')
@@ -158,234 +157,31 @@ export default function BookingsPage() {
   const [addAdminNotes, setAddAdminNotes] = useState('')
   const [formSaving, setFormSaving] = useState(false)
 
-  // Custom calendar picker states for Add/Edit Date Inputs
-  const [openCalendar, setOpenCalendar] = useState<'addStart' | 'addEnd' | 'editStart' | 'editEnd' | null>(null)
-  const [calendarViewDate, setCalendarViewDate] = useState<Date>(new Date())
-  const addStartCalendarRef = React.useRef<HTMLDivElement>(null)
-  const addEndCalendarRef = React.useRef<HTMLDivElement>(null)
-  const editStartCalendarRef = React.useRef<HTMLDivElement>(null)
-  const editEndCalendarRef = React.useRef<HTMLDivElement>(null)
-
-  // Validation error states
-  const [addEmailError, setAddEmailError] = useState('')
-  const [addStartDateError, setAddStartDateError] = useState('')
-  const [addEndDateError, setAddEndDateError] = useState('')
-  const [editEmailError, setEditEmailError] = useState('')
-  const [editStartDateError, setEditStartDateError] = useState('')
-  const [editEndDateError, setEditEndDateError] = useState('')
-  const [addClientNameError, setAddClientNameError] = useState('')
-  const [addAgreedPriceError, setAddAgreedPriceError] = useState('')
-  const [addLocationError, setAddLocationError] = useState('')
+  // Error States
   const [editClientNameError, setEditClientNameError] = useState('')
+  const [editEmailError, setEditEmailError] = useState('')
+  const [editEventDatesError, setEditEventDatesError] = useState('')
   const [editAgreedPriceError, setEditAgreedPriceError] = useState('')
 
-  // Dynamic percentages for receipt view
-  const receiptAgreedPrice = receiptBooking ? Number(receiptBooking.agreed_price || 0) : 0
-  const receiptAdvancePaid = receiptBooking ? Number(receiptBooking.advance_paid || 0) : 0
-  const receiptAdvancePct = receiptAgreedPrice > 0 ? (receiptAdvancePaid / receiptAgreedPrice) * 100 : 0
-  const receiptBalancePct = Math.max(0, 100 - receiptAdvancePct)
+  const [addClientNameError, setAddClientNameError] = useState('')
+  const [addEmailError, setAddEmailError] = useState('')
+  const [addLocationError, setAddLocationError] = useState('')
+  const [addEventDatesError, setAddEventDatesError] = useState('')
+  const [addAgreedPriceError, setAddAgreedPriceError] = useState('')
 
-  // Load Data
-  useEffect(() => {
-    fetchBookings()
-  }, [])
+  const addDays = addEventDates.length || 1
+  const addPriceNum = Number(addAgreedPrice) || 0;
+  const addAdvanceNum = Number(addAdvancePaid) || 0;
+  const computedAddBalance = Math.max(0, addPriceNum - addAdvanceNum);
+  const addAdvancePct = addPriceNum > 0 ? (addAdvanceNum / addPriceNum) * 100 : 0;
 
-  // Auto calculate balance due and payment status for ADD form
-  const computedAddBalance = Math.max(0, Number(addAgreedPrice || 0) - Number(addAdvancePaid || 0))
-  useEffect(() => {
-    const price = Number(addAgreedPrice || 0)
-    const paid = Number(addAdvancePaid || 0)
-    if (price > 0) {
-      if (paid >= price) {
-        setAddPaymentStatus('paid')
-      } else if (paid > 0) {
-        setAddPaymentStatus('partial')
-      } else {
-        setAddPaymentStatus('due')
-      }
-    }
-  }, [addAgreedPrice, addAdvancePaid])
+  const editPriceNum = Number(editAgreedPrice) || 0;
+  const editAdvanceNum = Number(editAdvancePaid) || 0;
+  const computedEditBalance = Math.max(0, editPriceNum - editAdvanceNum);
+  const editAdvancePct = editPriceNum > 0 ? (editAdvanceNum / editPriceNum) * 100 : 0;
 
-  // Auto calculate balance due and payment status for EDIT form
-  const computedEditBalance = Math.max(0, Number(editAgreedPrice || 0) - Number(editAdvancePaid || 0))
-  useEffect(() => {
-    const price = Number(editAgreedPrice || 0)
-    const paid = Number(editAdvancePaid || 0)
-    if (price > 0) {
-      if (paid >= price) {
-        setEditPaymentStatus('paid')
-      } else if (paid > 0) {
-        setEditPaymentStatus('partial')
-      } else {
-        setEditPaymentStatus('due')
-      }
-    }
-  }, [editAgreedPrice, editAdvancePaid])
-
-  // Click outside listener for custom calendar popups
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (openCalendar === 'addStart' && addStartCalendarRef.current && !addStartCalendarRef.current.contains(event.target as Node)) {
-        if (!(event.target as HTMLElement).closest('.add-start-toggle')) {
-          setOpenCalendar(null)
-        }
-      }
-      if (openCalendar === 'addEnd' && addEndCalendarRef.current && !addEndCalendarRef.current.contains(event.target as Node)) {
-        if (!(event.target as HTMLElement).closest('.add-end-toggle')) {
-          setOpenCalendar(null)
-        }
-      }
-      if (openCalendar === 'editStart' && editStartCalendarRef.current && !editStartCalendarRef.current.contains(event.target as Node)) {
-        if (!(event.target as HTMLElement).closest('.edit-start-toggle')) {
-          setOpenCalendar(null)
-        }
-      }
-      if (openCalendar === 'editEnd' && editEndCalendarRef.current && !editEndCalendarRef.current.contains(event.target as Node)) {
-        if (!(event.target as HTMLElement).closest('.edit-end-toggle')) {
-          setOpenCalendar(null)
-        }
-      }
-    }
-
-    if (openCalendar) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [openCalendar])
-
-  const parseDisplayDate = (displayStr: string): Date | null => {
-    if (!displayStr) return null
-    const parts = displayStr.split('/')
-    if (parts.length === 3) {
-      const [d, m, y] = parts.map(Number)
-      if (!isNaN(d) && !isNaN(m) && !isNaN(y) && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-        const dt = new Date(y, m - 1, d)
-        if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
-          return dt
-        }
-      }
-    }
-    return null
-  }
-
-  const toggleCalendar = (type: 'addStart' | 'addEnd' | 'editStart' | 'editEnd') => {
-    if (openCalendar === type) {
-      setOpenCalendar(null)
-    } else {
-      let dateVal = ''
-      if (type === 'addStart') dateVal = addStartDate
-      else if (type === 'addEnd') dateVal = addEndDate
-      else if (type === 'editStart') dateVal = editStartDate
-      else if (type === 'editEnd') dateVal = editEndDate
-
-      const parsed = parseDisplayDate(dateVal)
-      setCalendarViewDate(parsed || new Date())
-      setOpenCalendar(type)
-    }
-  }
-
-  const renderDaysGrid = (type: 'addStart' | 'addEnd' | 'editStart' | 'editEnd') => {
-    const year = calendarViewDate.getFullYear()
-    const month = calendarViewDate.getMonth()
-    const firstDayIndex = new Date(year, month, 1).getDay()
-    const totalDays = new Date(year, month + 1, 0).getDate()
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const cells = []
-    for (let i = 0; i < firstDayIndex; i++) {
-      cells.push(<div key={`empty-${i}`} className="w-8 h-8" />)
-    }
-
-    for (let day = 1; day <= totalDays; day++) {
-      const cellDateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`
-      const cellDateObj = new Date(year, month, day)
-      const isDisabled = cellDateObj < today
-      
-      let isSelected = false
-      if (type === 'addStart') isSelected = addStartDate === cellDateStr
-      else if (type === 'addEnd') isSelected = addEndDate === cellDateStr
-      else if (type === 'editStart') isSelected = editStartDate === cellDateStr
-      else if (type === 'editEnd') isSelected = editEndDate === cellDateStr
-
-      if (isDisabled) {
-        cells.push(
-          <button
-            key={`day-${day}`}
-            type="button"
-            disabled={true}
-            className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-txt-muted opacity-30 cursor-not-allowed text-xs"
-            title="Date is in the past"
-          >
-            {day}
-          </button>
-        )
-      } else {
-        cells.push(
-          <button
-            key={`day-${day}`}
-            type="button"
-            onClick={() => {
-              if (type === 'addStart') {
-                setAddStartDate(cellDateStr)
-              } else if (type === 'addEnd') {
-                setAddEndDate(cellDateStr)
-              } else if (type === 'editStart') {
-                setEditStartDate(cellDateStr)
-              } else if (type === 'editEnd') {
-                setEditEndDate(cellDateStr)
-              }
-              setOpenCalendar(null)
-            }}
-            className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-xs transition-colors hover:bg-tbl-hover ${
-              isSelected 
-                ? 'bg-txt-primary text-bg-base hover:opacity-90' 
-                : 'text-txt-primary'
-            }`}
-          >
-            {day}
-          </button>
-        )
-      }
-    }
-
-    return cells
-  }
-
-  const handleDateInputChange = (val: string, setter: (v: string) => void) => {
-    let cleaned = val.replace(/[^0-9]/g, '')
-    if (cleaned.length > 8) {
-      cleaned = cleaned.slice(0, 8)
-    }
-    
-    let formatted = cleaned
-    if (cleaned.length > 2) {
-      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2)
-    }
-    if (cleaned.length > 4) {
-      formatted = formatted.slice(0, 5) + '/' + cleaned.slice(4)
-    }
-    
-    setter(formatted)
-  }
-
-  // Auto calculate number of days
-  const calculateDays = (start: string, end: string) => {
-    if (!start || !end) return 1
-    const startDb = start.includes('/') ? displayDateToDbDate(start) : start
-    const endDb = end.includes('/') ? displayDateToDbDate(end) : end
-    const s = new Date(startDb)
-    const e = new Date(endDb)
-    const diff = e.getTime() - s.getTime()
-    if (isNaN(diff)) return 1
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1
-    return days > 0 ? days : 1
-  }
-
-  const addDays = calculateDays(addStartDate, addEndDate)
+  const receiptAdvancePct = receiptBooking?.agreed_price > 0 ? (receiptBooking.advance_paid / receiptBooking.agreed_price) * 100 : 0;
+  const receiptBalancePct = receiptBooking?.agreed_price > 0 ? (receiptBooking.balance_due / receiptBooking.agreed_price) * 100 : 0;
 
   const fetchBookings = async () => {
     setLoading(true)
@@ -467,11 +263,9 @@ export default function BookingsPage() {
     setEditSpecialRequirements(b.special_requirements || '')
     setEditBookingStatus(b.booking_status)
     setEditAdminNotes(b.admin_notes || '')
-    setEditStartDate(dbDateToDisplayDate(b.event_date_start))
-    setEditEndDate(dbDateToDisplayDate(b.event_date_end))
+    setEditEventDates(parseEventDates(b.event_dates, b.event_date_start, b.event_date_end))
     setEditEmailError('')
-    setEditStartDateError('')
-    setEditEndDateError('')
+    setEditEventDatesError('')
     setEditClientNameError('')
     setEditAgreedPriceError('')
     setIsEditPanelOpen(true)
@@ -482,8 +276,7 @@ export default function BookingsPage() {
     if (!editingBooking) return
     // Reset errors
     setEditEmailError('')
-    setEditStartDateError('')
-    setEditEndDateError('')
+    setEditEventDatesError('')
     setEditClientNameError('')
     setEditAgreedPriceError('')
 
@@ -497,12 +290,8 @@ export default function BookingsPage() {
       setEditAgreedPriceError("Agreed Price is required.")
       hasError = true
     }
-    if (!editStartDate) {
-      setEditStartDateError("Start Date is required.")
-      hasError = true
-    }
-    if (!editEndDate) {
-      setEditEndDateError("End Date is required.")
+    if (!editEventDates || editEventDates.length === 0) {
+      setEditEventDatesError("At least one Event Date is required.")
       hasError = true
     }
 
@@ -511,26 +300,9 @@ export default function BookingsPage() {
       hasError = true
     }
 
-    if (editStartDate && isInvalidDate(editStartDate)) {
-      setEditStartDateError("Please enter a valid Start Date in DD/MM/YYYY format.")
-      hasError = true
-    }
-    if (editEndDate && isInvalidDate(editEndDate)) {
-      setEditEndDateError("Please enter a valid End Date in DD/MM/YYYY format.")
-      hasError = true
-    }
-
-    if (hasError) {
-      return
-    }
-
-    const dbStart = displayDateToDbDate(editStartDate)
-    const dbEnd = displayDateToDbDate(editEndDate || editStartDate)
-
-    if (dbEnd < dbStart) {
-      setEditEndDateError("End Date cannot be before Start Date.")
-      return
-    }
+    const eventDatesStr = formatMultiDates(editEventDates)
+    const dbStart = editEventDates.length > 0 ? editEventDates[0] : null
+    const dbEnd = editEventDates.length > 0 ? editEventDates[editEventDates.length - 1] : null
 
     const priceNum = Number(editAgreedPrice)
     const advanceNum = Number(editAdvancePaid || 0)
@@ -573,7 +345,8 @@ export default function BookingsPage() {
       booking_status: editBookingStatus,
       admin_notes: editAdminNotes || null,
       event_date_start: dbStart,
-      event_date_end: dbEnd
+      event_date_end: dbEnd,
+      event_dates: eventDatesStr
     }
 
     // Optimistic UI updates
@@ -598,8 +371,8 @@ export default function BookingsPage() {
           events[eventIdx] = {
             ...events[eventIdx],
             title: `${editingBooking.event_type.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}: ${editClientName}`,
-            event_date: dbStart,
-            event_end_date: dbEnd,
+            event_date: dbStart || '',
+            event_end_date: dbEnd || '',
             notes: `Package: ${editPackage}. Price agreed: ₹${priceNum}. Location: ${editLocation}. Lead: ${editLeadPhotographer || '—'}.`
           }
           saveDemoEvents(events)
@@ -649,6 +422,7 @@ export default function BookingsPage() {
             title: `${editingBooking.event_type.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}: ${editClientName}`,
             event_date: dbStart,
             event_end_date: dbEnd,
+            event_dates: eventDatesStr,
             notes: `Package: ${editPackage}. Price agreed: ₹${priceNum}. Location: ${editLocation}. Lead: ${editLeadPhotographer || '—'}.`
           })
           .eq('id', editingBooking.calendar_event_id)
@@ -713,8 +487,7 @@ export default function BookingsPage() {
     setAddAgreedPriceError('');
     setAddLocationError('');
     setAddEmailError('');
-    setAddStartDateError('');
-    setAddEndDateError('');
+    setAddEventDatesError('');
 
     let hasError = false;
 
@@ -730,12 +503,8 @@ export default function BookingsPage() {
       setAddLocationError("Location is required.");
       hasError = true;
     }
-    if (!addStartDate) {
-      setAddStartDateError("Start Date is required.");
-      hasError = true;
-    }
-    if (!addEndDate) {
-      setAddEndDateError("End Date is required.");
+    if (!addEventDates || addEventDates.length === 0) {
+      setAddEventDatesError("At least one Event Date is required.");
       hasError = true;
     }
 
@@ -744,30 +513,13 @@ export default function BookingsPage() {
       hasError = true;
     }
 
-    if (addStartDate && isInvalidDate(addStartDate)) {
-      setAddStartDateError("Please enter a valid Start Date in DD/MM/YYYY format.");
-      hasError = true;
-    }
-    if (addEndDate && isInvalidDate(addEndDate)) {
-      setAddEndDateError("Please enter a valid End Date in DD/MM/YYYY format.");
-      hasError = true;
-    }
-
-    if (hasError) {
-      return;
-    }
-
-    const dbStart = displayDateToDbDate(addStartDate)
-    const dbEnd = displayDateToDbDate(addEndDate || addStartDate)
-
-    if (dbEnd < dbStart) {
-      setAddEndDateError("End Date cannot be before Start Date.");
-      return;
-    }
+    const eventDatesStr = formatMultiDates(addEventDates);
+    const dbStart = addEventDates.length > 0 ? addEventDates[0] : null;
+    const dbEnd = addEventDates.length > 0 ? addEventDates[addEventDates.length - 1] : null;
 
     const todayVal = new Date().toISOString().split('T')[0];
-    if (dbStart < todayVal) {
-      setAddStartDateError("Event start date cannot be before today.");
+    if (dbStart && dbStart < todayVal) {
+      setAddEventDatesError("Event start date cannot be before today.");
       return;
     }
 
@@ -806,8 +558,9 @@ export default function BookingsPage() {
       phone: addPhone,
       how_found: addHowFound,
       event_type: addEventType,
-      event_date_start: dbStart,
-      event_date_end: dbEnd,
+      event_date_start: dbStart || '',
+      event_date_end: dbEnd || '',
+      event_dates: eventDatesStr,
       location: addLocation,
       package: addPackage === 'Custom' ? `Custom: ${addCustomPackageDetails}` : addPackage,
       package_details: addCustomPackageDetails || null,
@@ -832,8 +585,9 @@ export default function BookingsPage() {
       id: tempEventId,
       enquiry_id: null,
       title: `${addEventType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}: ${addClientName}`,
-      event_date: dbStart,
-      event_end_date: dbEnd,
+      event_date: dbStart || '',
+      event_end_date: dbEnd || '',
+      event_dates: eventDatesStr,
       event_type: addEventType as any,
       team_member: addLeadPhotographer ? `${addLeadPhotographer} (Lead Photographer)` : null,
       notes: `Package: ${addPackage}. Price agreed: ₹${priceNum}. Location: ${addLocation}. Lead: ${addLeadPhotographer || '—'}. ${addSpecialRequirements || ''}`,
@@ -871,6 +625,7 @@ export default function BookingsPage() {
           title: newCalendarEvent.title,
           event_date: dbStart,
           event_end_date: dbEnd,
+          event_dates: eventDatesStr,
           event_type: addEventType,
           team_member: addLeadPhotographer ? `${addLeadPhotographer} (Lead Photographer)` : null,
           notes: newCalendarEvent.notes
@@ -929,8 +684,7 @@ export default function BookingsPage() {
     setAddPhone('')
     setAddHowFound('Instagram')
     setAddEventType('marriage')
-    setAddStartDate('')
-    setAddEndDate('')
+    setAddEventDates([])
     setAddLocation('')
     setAddPackage('Full Wedding Photo+Video')
     setAddCustomPackageDetails('')
@@ -944,8 +698,7 @@ export default function BookingsPage() {
     setAddBookingStatus('confirmed')
     setAddAdminNotes('')
     setAddEmailError('')
-    setAddStartDateError('')
-    setAddEndDateError('')
+    setAddEventDatesError('')
   }
 
   // Filter & Sort Logic
@@ -1411,156 +1164,15 @@ export default function BookingsPage() {
                   )}
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-txt-primary">Event Date (Start) <span className="text-red-500">*</span></label>
-                  <div className="relative flex flex-col justify-start">
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        required
-                        placeholder="DD/MM/YYYY"
-                        value={addStartDate}
-                        onChange={(e) => handleDateInputChange(e.target.value, setAddStartDate)}
-                        onFocus={() => {
-                          const parsed = parseDisplayDate(addStartDate)
-                          setCalendarViewDate(parsed || new Date())
-                          setOpenCalendar('addStart')
-                        }}
-                        className={`w-full pl-3 pr-10 py-2 border rounded-lg text-sm focus:outline-hidden focus:ring-1 ${
-                          addStartDateError 
-                            ? 'border-red-500 bg-input-base text-txt-primary focus:ring-red-500' 
-                            : 'border-input-border bg-input-base text-txt-primary focus:border-txt-primary focus:ring-txt-primary'
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCalendar('addStart')}
-                        className="add-start-toggle absolute right-2 text-txt-muted hover:text-txt-primary p-1 rounded hover:bg-tbl-hover transition-colors"
-                        title="Select date"
-                      >
-                        <Calendar className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* Custom Calendar Popup */}
-                    {openCalendar === 'addStart' && (
-                      <div 
-                        ref={addStartCalendarRef}
-                        className="absolute left-0 top-full mt-1 z-[9999] bg-modal-base border border-border-base rounded-lg shadow-lg-base p-3 w-64 text-sm text-txt-primary select-none animate-fadeIn"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-tbl-hover rounded transition-colors"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                          <span className="font-bold">
-                            {calendarViewDate.toLocaleString('default', { month: 'long' })} {calendarViewDate.getFullYear()}
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-tbl-hover rounded transition-colors"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-txt-muted mb-1">
-                          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                          {renderDaysGrid('addStart')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {addStartDateError && (
-                    <p className="text-[11px] font-semibold text-red-500 mt-1">{addStartDateError}</p>
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-txt-primary">Event Date (End) <span className="text-red-500">*</span></label>
-                  <div className="relative flex flex-col justify-start">
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        required
-                        placeholder="DD/MM/YYYY"
-                        value={addEndDate}
-                        onChange={(e) => handleDateInputChange(e.target.value, setAddEndDate)}
-                        onFocus={() => {
-                          const parsed = parseDisplayDate(addEndDate)
-                          setCalendarViewDate(parsed || new Date())
-                          setOpenCalendar('addEnd')
-                        }}
-                        className={`w-full pl-3 pr-10 py-2 border rounded-lg text-sm focus:outline-hidden focus:ring-1 ${
-                          addEndDateError 
-                            ? 'border-red-500 bg-input-base text-txt-primary focus:ring-red-500' 
-                            : 'border-input-border bg-input-base text-txt-primary focus:border-txt-primary focus:ring-txt-primary'
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCalendar('addEnd')}
-                        className="add-end-toggle absolute right-2 text-txt-muted hover:text-txt-primary p-1 rounded hover:bg-tbl-hover transition-colors"
-                        title="Select date"
-                      >
-                        <Calendar className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* Custom Calendar Popup */}
-                    {openCalendar === 'addEnd' && (
-                      <div 
-                        ref={addEndCalendarRef}
-                        className="absolute left-0 top-full mt-1 z-[9999] bg-modal-base border border-border-base rounded-lg shadow-lg-base p-3 w-64 text-sm text-txt-primary select-none animate-fadeIn"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-tbl-hover rounded transition-colors"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                          <span className="font-bold">
-                            {calendarViewDate.toLocaleString('default', { month: 'long' })} {calendarViewDate.getFullYear()}
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-tbl-hover rounded transition-colors"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-txt-muted mb-1">
-                          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                          {renderDaysGrid('addEnd')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {addEndDateError && (
-                    <p className="text-[11px] font-semibold text-red-500 mt-1">{addEndDateError}</p>
-                  )}
+                <div className="col-span-1 sm:col-span-2">
+                  <MultiDatePicker
+                    label="Event Date(s)"
+                    selectedDates={addEventDates}
+                    onChange={setAddEventDates}
+                    placeholder="Select event date(s)"
+                    error={addEventDatesError}
+                    allowPast={true}
+                  />
                 </div>
 
                 <div className="space-y-1">
@@ -1677,13 +1289,22 @@ export default function BookingsPage() {
                   <input
                     type="text"
                     value={
-                      Number(addAgreedPrice || 0) > 0
-                        ? `${((Number(addAdvancePaid || 0) / Number(addAgreedPrice)) * 100).toFixed(1)}% advance received`
+                      Number(addAdvancePaid) > Number(addAgreedPrice)
+                        ? 'Warning: Advance > Price'
+                        : Number(addAgreedPrice || 0) > 0
+                        ? `${addAdvancePct.toFixed(1)}% advance received`
                         : '0.0% advance received'
                     }
                     readOnly
-                    className="w-full px-3 py-2 border border-border-base rounded-lg text-sm bg-sidebar-active text-txt-secondary font-bold focus:outline-hidden"
+                    className={`w-full px-3 py-2 border rounded-lg text-sm font-bold focus:outline-hidden ${
+                      Number(addAdvancePaid) > Number(addAgreedPrice)
+                        ? 'border-red-500 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'
+                        : 'border-border-base bg-sidebar-active text-txt-secondary'
+                    }`}
                   />
+                  {Number(addAdvancePaid) > Number(addAgreedPrice) && (
+                    <p className="text-[11px] font-semibold text-red-500 mt-1">Advance cannot exceed agreed price.</p>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -1925,164 +1546,15 @@ export default function BookingsPage() {
               </div>
 
               {/* Dates */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-txt-muted">Start Date</label>
-                  <div className="relative flex flex-col justify-start">
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        required
-                        placeholder="DD/MM/YYYY"
-                        value={editStartDate}
-                        onChange={(e) => {
-                          handleDateInputChange(e.target.value, setEditStartDate);
-                          if (editStartDateError) setEditStartDateError('');
-                        }}
-                        onFocus={() => {
-                          const parsed = parseDisplayDate(editStartDate)
-                          setCalendarViewDate(parsed || new Date())
-                          setOpenCalendar('editStart')
-                        }}
-                        className={`w-full border rounded-lg pl-3 pr-8 py-1.5 text-xs focus:outline-hidden focus:ring-1 ${
-                          editStartDateError 
-                            ? 'border-red-500 bg-input-base text-txt-primary focus:ring-red-500' 
-                            : 'border-input-border bg-input-base text-txt-primary focus:border-txt-primary focus:ring-txt-primary'
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCalendar('editStart')}
-                        className="edit-start-toggle absolute right-1.5 text-txt-muted hover:text-txt-primary p-0.5 rounded hover:bg-tbl-hover transition-colors"
-                        title="Select date"
-                      >
-                        <Calendar className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Custom Calendar Popup */}
-                    {openCalendar === 'editStart' && (
-                      <div 
-                        ref={editStartCalendarRef}
-                        className="absolute right-0 top-full mt-1 z-[9999] bg-modal-base border border-border-base rounded-lg shadow-lg-base p-3 w-64 text-sm text-txt-primary select-none animate-fadeIn"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-tbl-hover rounded transition-colors"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                          <span className="font-bold">
-                            {calendarViewDate.toLocaleString('default', { month: 'long' })} {calendarViewDate.getFullYear()}
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-tbl-hover rounded transition-colors"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-txt-muted mb-1">
-                          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                          {renderDaysGrid('editStart')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {editStartDateError && (
-                    <p className="text-[10px] font-semibold text-red-500 mt-1">{editStartDateError}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-txt-muted">End Date</label>
-                  <div className="relative flex flex-col justify-start">
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        required
-                        placeholder="DD/MM/YYYY"
-                        value={editEndDate}
-                        onChange={(e) => {
-                          handleDateInputChange(e.target.value, setEditEndDate);
-                          if (editEndDateError) setEditEndDateError('');
-                        }}
-                        onFocus={() => {
-                          const parsed = parseDisplayDate(editEndDate)
-                          setCalendarViewDate(parsed || new Date())
-                          setOpenCalendar('editEnd')
-                        }}
-                        className={`w-full border rounded-lg pl-3 pr-8 py-1.5 text-xs focus:outline-hidden focus:ring-1 ${
-                          editEndDateError 
-                            ? 'border-red-500 bg-input-base text-txt-primary focus:ring-red-500' 
-                            : 'border-input-border bg-input-base text-txt-primary focus:border-txt-primary focus:ring-txt-primary'
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCalendar('editEnd')}
-                        className="edit-end-toggle absolute right-1.5 text-txt-muted hover:text-txt-primary p-0.5 rounded hover:bg-tbl-hover transition-colors"
-                        title="Select date"
-                      >
-                        <Calendar className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Custom Calendar Popup */}
-                    {openCalendar === 'editEnd' && (
-                      <div 
-                        ref={editEndCalendarRef}
-                        className="absolute right-0 top-full mt-1 z-[9999] bg-modal-base border border-border-base rounded-lg shadow-lg-base p-3 w-64 text-sm text-txt-primary select-none animate-fadeIn"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-tbl-hover rounded transition-colors"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                          <span className="font-bold">
-                            {calendarViewDate.toLocaleString('default', { month: 'long' })} {calendarViewDate.getFullYear()}
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-tbl-hover rounded transition-colors"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-txt-muted mb-1">
-                          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                          {renderDaysGrid('editEnd')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {editEndDateError && (
-                    <p className="text-[10px] font-semibold text-red-500 mt-1">{editEndDateError}</p>
-                  )}
-                </div>
+              <div className="grid grid-cols-1 gap-4">
+                <MultiDatePicker
+                  label="Event Date(s)"
+                  selectedDates={editEventDates}
+                  onChange={setEditEventDates}
+                  placeholder="Select event date(s)"
+                  error={editEventDatesError}
+                  allowPast={true}
+                />
               </div>
 
               {/* Location */}
@@ -2154,13 +1626,22 @@ export default function BookingsPage() {
                   <input
                     type="text"
                     value={
-                      Number(editAgreedPrice || 0) > 0
-                        ? `${((Number(editAdvancePaid || 0) / Number(editAgreedPrice)) * 100).toFixed(1)}% advance received`
+                      Number(editAdvancePaid) > Number(editAgreedPrice)
+                        ? 'Warning: Advance > Price'
+                        : Number(editAgreedPrice || 0) > 0
+                        ? `${editAdvancePct.toFixed(1)}% advance received`
                         : '0.0% advance received'
                     }
                     readOnly
-                    className="w-full border border-border-base bg-sidebar-active text-txt-secondary font-bold rounded-lg px-3 py-1.5 text-xs focus:outline-hidden"
+                    className={`w-full border rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-hidden ${
+                      Number(editAdvancePaid) > Number(editAgreedPrice)
+                        ? 'border-red-500 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'
+                        : 'border-border-base bg-sidebar-active text-txt-secondary'
+                    }`}
                   />
+                  {Number(editAdvancePaid) > Number(editAgreedPrice) && (
+                    <p className="text-[10px] font-semibold text-red-500 mt-1">Advance cannot exceed agreed price.</p>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -2361,14 +1842,14 @@ export default function BookingsPage() {
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-txt-muted print:text-gray-400 mb-2">Billed To</h4>
                   <p className="font-bold text-txt-primary print:text-black">{receiptBooking.client_name}</p>
-                  <p className="text-txt-secondary print:text-gray-500 text-xs mt-1">{receiptBooking.email || '—'}</p>
-                  <p className="text-txt-secondary print:text-gray-500 text-xs mt-0.5">{receiptBooking.phone || '—'}</p>
+                  <p className="font-semibold text-txt-primary print:text-black text-sm mt-1">{receiptBooking.phone || '—'}</p>
+                  <p className="text-txt-secondary print:text-gray-500 text-[10px] mt-0.5">{receiptBooking.email || '—'}</p>
                 </div>
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-txt-muted print:text-gray-400 mb-2">Shoot Details</h4>
                   <p className="font-semibold text-txt-primary print:text-black">Package: {receiptBooking.package}</p>
                   <p className="text-txt-secondary print:text-gray-500 text-xs mt-1 font-medium">
-                    Dates: {formatDateRangeText(receiptBooking.event_date_start, receiptBooking.event_date_end)}
+                    Dates: {formatMultiDates(receiptBooking.event_dates || '')}
                   </p>
                   <p className="text-txt-secondary print:text-gray-500 text-xs mt-0.5">
                     Location: {receiptBooking.location || '—'}
@@ -2390,7 +1871,7 @@ export default function BookingsPage() {
                       <td className="px-4 py-3">
                         <span className="font-bold text-txt-primary print:text-black block">{receiptBooking.event_type.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} Shoot Services</span>
                         <span className="text-[10px] text-txt-muted print:text-gray-400 font-normal">
-                          Wedding Photography & Cinematography covering {formatDateRangeText(receiptBooking.event_date_start, receiptBooking.event_date_end)} in {receiptBooking.location || 'General Venue'}.
+                          Photography/Cinematography services for {formatMultiDates(receiptBooking.event_dates || '')} in {receiptBooking.location || 'General Venue'}.
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-txt-primary print:text-black">

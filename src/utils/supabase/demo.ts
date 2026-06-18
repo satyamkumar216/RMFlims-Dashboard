@@ -24,6 +24,7 @@ export interface DemoCalendarEvent {
   title: string
   event_date: string
   event_end_date?: string | null
+  event_dates: string
   event_type: 'marriage' | 'brand_photoshoot' | 'portfolio_shoot' | 'model_shoot' | 'reel_shoot' | 'manual_shoot' | 'blocked'
   team_member: string | null
   notes: string | null
@@ -42,6 +43,7 @@ export interface DemoBooking {
   event_type: string
   event_date_start: string
   event_date_end: string
+  event_dates: string
   location: string
   package: string
   package_details?: string | null
@@ -140,6 +142,7 @@ const defaultEvents: DemoCalendarEvent[] = [
     title: 'Booking: Sarah & Neil',
     event_date: '2026-06-22',
     event_end_date: '2026-06-22',
+    event_dates: '2026-06-22',
     event_type: 'marriage',
     team_member: 'Rohan (Lead Photographer)',
     notes: 'Package: Wedding Day Only. Agreed Price: ₹80,000.',
@@ -151,6 +154,7 @@ const defaultEvents: DemoCalendarEvent[] = [
     title: 'Brand Photoshoot: Nike Fashion Line',
     event_date: '2026-06-20',
     event_end_date: '2026-06-21',
+    event_dates: '2026-06-20,2026-06-21',
     event_type: 'brand_photoshoot',
     team_member: 'Simran',
     notes: 'Photoshoot at Nike HQ studio.',
@@ -162,6 +166,7 @@ const defaultEvents: DemoCalendarEvent[] = [
     title: 'Blocked: Sensor Cleaning',
     event_date: '2026-06-25',
     event_end_date: '2026-06-25',
+    event_dates: '2026-06-25',
     event_type: 'blocked',
     team_member: null,
     notes: 'Equipment servicing day.',
@@ -212,6 +217,7 @@ const defaultBookings: DemoBooking[] = [
     event_type: 'marriage',
     event_date_start: '2026-06-22',
     event_date_end: '2026-06-22',
+    event_dates: '2026-06-22',
     location: 'Delhi',
     package: 'Wedding Day Only',
     package_details: 'Traditional photography coverage',
