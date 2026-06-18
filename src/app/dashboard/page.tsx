@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { isDemoMode, getDemoEnquiries, getDemoBookings, getDemoEvents } from '@/utils/supabase/demo'
-import { Search, SlidersHorizontal, Calendar as CalendarIcon, ArrowUpDown, Inbox, CheckCircle2, DollarSign, TrendingUp, TrendingDown, Plus } from 'lucide-react'
+import { Search, SlidersHorizontal, Calendar as CalendarIcon, ArrowUpDown, Inbox, CheckCircle2, IndianRupee, TrendingUp, TrendingDown, Plus } from 'lucide-react'
 
 interface Enquiry {
   id: string
@@ -279,7 +279,7 @@ export default function EnquiriesPage() {
               <div className="flex justify-between items-start">
                 <span className="text-[13px] font-medium text-txt-secondary">Revenue</span>
                 <div className="p-2.5 rounded-full bg-[#FAF5FF] text-purple-600 dark:bg-purple-500/10 dark:text-purple-400">
-                  <DollarSign className="h-4.5 w-4.5" />
+                  <IndianRupee className="h-4.5 w-4.5" />
                 </div>
               </div>
               <div className="flex items-end justify-between">

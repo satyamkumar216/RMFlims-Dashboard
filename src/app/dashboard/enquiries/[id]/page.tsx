@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/utils/supabase/client'
 import { isDemoMode, getDemoEnquiries, saveDemoEnquiries, getDemoEvents, saveDemoEvents, getDemoBookings, saveDemoBookings } from '@/utils/supabase/demo'
+import { generateUniqueReceiptNumber } from '@/utils/invoice'
 import { ArrowLeft, Save, ShieldAlert, CheckCircle2, Loader2, Printer, X, FileText, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface Enquiry {
@@ -445,17 +446,9 @@ export default function EnquiryDetailPage() {
           if (paymentStatus === 'fully_paid') payStatus = 'paid'
           else if (paymentStatus === 'advance_paid') payStatus = 'partial'
 
-          const nextReceipt = () => {
-            const year = new Date().getFullYear();
-            let maxNum = 0;
-            demoBookings.forEach(b => {
-              const match = b.receipt_number.match(/XYZ-(\d+)-(\d+)/)
-              if (match && Number(match[1]) === year) {
-                const num = Number(match[2])
-                if (num > maxNum) maxNum = num
-              }
-            })
-            return `XYZ-${year}-${String(maxNum + 1).padStart(3, '0')}`
+          let receiptNumber = ''
+          if (existingBookingIdx === -1) {
+            receiptNumber = await generateUniqueReceiptNumber(null, true, demoBookings)
           }
 
           if (existingBookingIdx !== -1) {
@@ -501,7 +494,7 @@ export default function EnquiryDetailPage() {
               payment_method: paymentMethod || 'UPI',
               payment_terms: paymentTimeline || '50% Advance / 50% After Shoot',
               booking_status: 'confirmed',
-              receipt_number: nextReceipt(),
+              receipt_number: receiptNumber,
               created_at: new Date().toISOString()
             })
           }
@@ -655,21 +648,8 @@ export default function EnquiryDetailPage() {
               })
               .eq('enquiry_id', id)
           } else {
-            // Generate receipt number
-            const { data: allB } = await supabase
-              .from('bookings')
-              .select('receipt_number')
-
-            const year = new Date().getFullYear();
-            let maxNum = 0;
-            (allB || []).forEach(b => {
-              const match = b.receipt_number.match(/XYZ-(\d+)-(\d+)/)
-              if (match && Number(match[1]) === year) {
-                const num = Number(match[2])
-                if (num > maxNum) maxNum = num
-              }
-            })
-            const rNumber = `XYZ-${year}-${String(maxNum + 1).padStart(3, '0')}`
+            // Generate unique receipt number
+            const rNumber = await generateUniqueReceiptNumber(supabase, false)
 
             await supabase
               .from('bookings')

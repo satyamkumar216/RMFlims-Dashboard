@@ -228,7 +228,7 @@ const defaultBookings: DemoBooking[] = [
     special_requirements: 'None',
     booking_status: 'confirmed',
     admin_notes: 'Booking deposit paid in full.',
-    receipt_number: 'XYZ-2026-001',
+    receipt_number: 'RMF-2026-0001',
     created_at: '2026-06-10T09:15:00Z'
   }
 ]

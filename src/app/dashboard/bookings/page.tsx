@@ -10,6 +10,7 @@ import {
   getDemoEvents, 
   saveDemoEvents 
 } from '@/utils/supabase/demo'
+import { generateUniqueReceiptNumber } from '@/utils/invoice'
 import { 
   FileText, 
   Edit2, 
@@ -20,7 +21,6 @@ import {
   Phone, 
   MapPin, 
   Calendar, 
-  DollarSign, 
   SlidersHorizontal, 
   ArrowRight, 
   X, 
@@ -33,10 +33,10 @@ import {
 } from 'lucide-react'
 
 // Constants
-const AGENCY_NAME = "XYZ Films"
+const AGENCY_NAME = "RM Films"
 const AGENCY_TAGLINE = "Cinematic Weddings & Premium Portraits"
-const AGENCY_PHONE = "+91 99999 88888"
-const AGENCY_EMAIL = "hello@xyzfilms.com"
+const AGENCY_PHONE = "+91 70633 48026"
+const AGENCY_EMAIL = "hello@rounakmannafilms.com"
 
 const TYPE_COLORS: Record<string, string> = {
   marriage: '#D32F2F',
@@ -748,23 +748,9 @@ export default function BookingsPage() {
 
     const finalTerms = addPaymentTerms === 'Custom Terms' ? addCustomTermsText : addPaymentTerms;
 
-    // Generate receipt number helper
-    const getNextReceiptNumber = (allBookings: any[]) => {
-      const year = new Date().getFullYear();
-      let maxNum = 0;
-      allBookings.forEach(item => {
-        const match = item.receipt_number.match(/XYZ-(\d+)-(\d+)/);
-        if (match && Number(match[1]) === year) {
-          const num = Number(match[2]);
-          if (num > maxNum) maxNum = num;
-        }
-      });
-      return `XYZ-${year}-${String(maxNum + 1).padStart(3, '0')}`;
-    };
-
     const tempEventId = 'event-' + Date.now();
     const tempBookingId = 'booking-' + Date.now();
-    const receiptNum = getNextReceiptNumber(bookings);
+    const receiptNum = await generateUniqueReceiptNumber(isDemoMode() ? null : supabase, isDemoMode(), bookings);
 
     const newBookingObj = {
       id: tempBookingId,
