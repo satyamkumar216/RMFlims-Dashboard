@@ -431,6 +431,12 @@ export default function BookingsPage() {
 
   // Set State to open the inline Receipt Modal instead of a pop-up tab
   const handleGenerateReceipt = (booking: any) => {
+    const priceNum = Number(booking.agreed_price || 0)
+    const advanceNum = Number(booking.advance_paid || 0)
+    if (advanceNum > priceNum) {
+      alert(`Warning: The advance paid (₹${advanceNum}) is greater than the agreed price (₹${priceNum}) for this booking. Please correct this booking's payment details before generating the receipt.`)
+      return
+    }
     setReceiptBooking(booking)
     setShowReceipt(true)
   }
@@ -529,6 +535,14 @@ export default function BookingsPage() {
     const priceNum = Number(editAgreedPrice)
     const advanceNum = Number(editAdvancePaid || 0)
 
+    if (priceNum < 0) {
+      setEditAgreedPriceError("Agreed Price cannot be negative.")
+      return
+    }
+    if (advanceNum < 0) {
+      setEditAgreedPriceError("Advance Paid cannot be negative.")
+      return
+    }
     if (advanceNum > priceNum) {
       setEditAgreedPriceError("Agreed Price must be greater than or equal to Advance Paid.")
       return
@@ -760,6 +774,14 @@ export default function BookingsPage() {
     const priceNum = Number(addAgreedPrice);
     const advanceNum = Number(addAdvancePaid || 0);
 
+    if (priceNum < 0) {
+      setAddAgreedPriceError("Agreed Price cannot be negative.");
+      return;
+    }
+    if (advanceNum < 0) {
+      setAddAgreedPriceError("Advance Paid cannot be negative.");
+      return;
+    }
     if (advanceNum > priceNum) {
       setAddAgreedPriceError("Agreed Price must be greater than or equal to Advance Paid.");
       return;

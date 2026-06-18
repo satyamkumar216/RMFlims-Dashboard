@@ -350,6 +350,16 @@ export default function EnquiryDetailPage() {
     fetchEnquiry()
   }, [id, supabase])
 
+  const handleGenerateReceipt = () => {
+    const priceNum = agreedPrice === '' ? 0 : parseFloat(agreedPrice)
+    const paidVal = paidAmount === '' ? 0 : parseFloat(paidAmount)
+    if (paidVal > priceNum) {
+      alert(`Warning: The advance paid (₹${paidVal}) is greater than the agreed price (₹${priceNum}) for this booking. Please correct this booking's payment details before generating the receipt.`)
+      return
+    }
+    setShowReceipt(true)
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!enquiry) return
@@ -396,14 +406,25 @@ export default function EnquiryDetailPage() {
       return
     }
 
-    const numericPrice = agreedPrice === '' ? null : parseFloat(agreedPrice)
+    const priceNum = agreedPrice === '' ? 0 : parseFloat(agreedPrice)
     const paidVal = paidAmount === '' ? 0 : parseFloat(paidAmount)
 
-    if (numericPrice !== null && paidVal > numericPrice) {
+    if (priceNum < 0) {
+      setErrorMsg('Agreed Price cannot be negative.')
+      setSaving(false)
+      return
+    }
+    if (paidVal < 0) {
+      setErrorMsg('Advance Paid cannot be negative.')
+      setSaving(false)
+      return
+    }
+    if (paidVal > priceNum) {
       setErrorMsg('Agreed Price must be greater than or equal to Advance Paid.')
       setSaving(false)
       return
     }
+    const numericPrice = agreedPrice === '' ? null : parseFloat(agreedPrice)
 
     if (isDemoMode()) {
       try {
@@ -757,10 +778,16 @@ export default function EnquiryDetailPage() {
   // Format Date to DD/MM/YYYY
   const formatDateToDDMMYYYY = (dateStr: string | Date | null | undefined) => {
     if (!dateStr) return ''
+    if (typeof dateStr === 'string' && dateStr.includes('/')) {
+      return dateStr
+    }
     const date = typeof dateStr === 'string' ? new Date(dateStr) : dateStr
     if (typeof dateStr === 'string' && dateStr.includes('-') && !dateStr.includes('T')) {
       const [y, m, d] = dateStr.split('-').map(Number)
       return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
+    }
+    if (date instanceof Date && isNaN(date.getTime())) {
+      return ''
     }
     const d = date.getDate()
     const m = date.getMonth() + 1
@@ -839,7 +866,7 @@ export default function EnquiryDetailPage() {
           {/* Action to show Receipt if Confirmed */}
           {enquiry.status === 'confirmed' && (
             <button
-              onClick={() => setShowReceipt(true)}
+              onClick={handleGenerateReceipt}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border-base bg-card-base px-3.5 py-1.5 text-sm font-semibold text-txt-secondary hover:text-txt-primary hover:border-txt-muted transition-all cursor-pointer"
             >
               <FileText className="h-4 w-4 text-txt-muted" />
@@ -872,7 +899,7 @@ export default function EnquiryDetailPage() {
             {status === 'confirmed' && (
               <button
                 type="button"
-                onClick={() => setShowReceipt(true)}
+                onClick={handleGenerateReceipt}
                 className="self-start sm:self-center inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors cursor-pointer"
               >
                 <FileText className="h-3.5 w-3.5" />
