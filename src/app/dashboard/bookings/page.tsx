@@ -526,9 +526,15 @@ export default function BookingsPage() {
       return
     }
 
-    setEditPanelSaving(true)
     const priceNum = Number(editAgreedPrice)
     const advanceNum = Number(editAdvancePaid || 0)
+
+    if (advanceNum > priceNum) {
+      setEditAgreedPriceError("Agreed Price must be greater than or equal to Advance Paid.")
+      return
+    }
+
+    setEditPanelSaving(true)
     const balanceNum = Math.max(0, priceNum - advanceNum)
 
     const updatedBooking = {
@@ -751,9 +757,15 @@ export default function BookingsPage() {
       return;
     }
 
-    setFormSaving(true);
     const priceNum = Number(addAgreedPrice);
     const advanceNum = Number(addAdvancePaid || 0);
+
+    if (advanceNum > priceNum) {
+      setAddAgreedPriceError("Agreed Price must be greater than or equal to Advance Paid.");
+      return;
+    }
+
+    setFormSaving(true);
     const balanceNum = Math.max(0, priceNum - advanceNum);
 
     const finalTerms = addPaymentTerms;

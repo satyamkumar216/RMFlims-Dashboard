@@ -397,6 +397,13 @@ export default function EnquiryDetailPage() {
     }
 
     const numericPrice = agreedPrice === '' ? null : parseFloat(agreedPrice)
+    const paidVal = paidAmount === '' ? 0 : parseFloat(paidAmount)
+
+    if (numericPrice !== null && paidVal > numericPrice) {
+      setErrorMsg('Agreed Price must be greater than or equal to Advance Paid.')
+      setSaving(false)
+      return
+    }
 
     if (isDemoMode()) {
       try {
