@@ -1,6 +1,41 @@
--- Supabase Schema for Bookings Table
--- Run this query in your Supabase SQL editor to create the bookings table and link it with enquiries and calendar_events.
+-- Complete Supabase Schema for RMFlims Dashboard
+-- Run this in your Supabase SQL editor to create all tables and setup security policies.
 
+-- 1. ENQUIRIES TABLE
+CREATE TABLE IF NOT EXISTS enquiries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  package TEXT NOT NULL,
+  event_date DATE NOT NULL,
+  event_end_date DATE,
+  message TEXT NOT NULL,
+  agreed_price NUMERIC,
+  status TEXT NOT NULL CHECK (status IN ('new', 'in_progress', 'confirmed', 'cancelled')) DEFAULT 'new',
+  notes TEXT,
+  location TEXT,
+  payment_status TEXT CHECK (payment_status IN ('due', 'advance_paid', 'fully_paid')) DEFAULT 'due',
+  payment_method TEXT,
+  payment_timeline TEXT,
+  paid_amount NUMERIC DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 2. CALENDAR EVENTS TABLE
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  enquiry_id UUID REFERENCES enquiries(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  event_date DATE NOT NULL,
+  event_end_date DATE,
+  event_type TEXT NOT NULL CHECK (event_type IN ('marriage', 'brand_photoshoot', 'portfolio_shoot', 'model_shoot', 'reel_shoot', 'manual_shoot', 'blocked')),
+  team_member TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 3. BOOKINGS TABLE
 CREATE TABLE IF NOT EXISTS bookings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   enquiry_id UUID REFERENCES enquiries(id) ON DELETE SET NULL,
@@ -34,10 +69,22 @@ CREATE TABLE IF NOT EXISTS bookings (
 );
 
 -- Enable Row Level Security (RLS)
+ALTER TABLE enquiries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE calendar_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
 
--- Drop policy if exists to avoid conflicts
+-- Drop policies if they exist to avoid duplication errors
+DROP POLICY IF EXISTS "Allow full access for authenticated users" ON enquiries;
+DROP POLICY IF EXISTS "Allow public insert for client website" ON enquiries;
+DROP POLICY IF EXISTS "Allow full access for authenticated users" ON calendar_events;
 DROP POLICY IF EXISTS "Allow full access for authenticated users" ON bookings;
 
--- Create policy allowing authenticated users full access
+-- Policies for ENQUIRIES
+CREATE POLICY "Allow full access for authenticated users" ON enquiries FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public insert for client website" ON enquiries FOR INSERT WITH CHECK (true);
+
+-- Policies for CALENDAR EVENTS
+CREATE POLICY "Allow full access for authenticated users" ON calendar_events FOR ALL USING (true) WITH CHECK (true);
+
+-- Policies for BOOKINGS
 CREATE POLICY "Allow full access for authenticated users" ON bookings FOR ALL USING (true) WITH CHECK (true);
