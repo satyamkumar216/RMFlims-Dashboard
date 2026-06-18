@@ -90,7 +90,7 @@ const defaultEnquiries: DemoEnquiry[] = [
     location: 'Udaipur',
     payment_status: 'due',
     payment_method: null,
-    payment_timeline: '50% Advance / 50% After Shoot',
+    payment_timeline: 'Custom — see amounts below',
     paid_amount: 0
   },
   {
@@ -109,7 +109,7 @@ const defaultEnquiries: DemoEnquiry[] = [
     location: 'Goa',
     payment_status: 'advance_paid',
     payment_method: 'UPI',
-    payment_timeline: '50% Advance / 50% After Shoot',
+    payment_timeline: 'Custom — see amounts below',
     paid_amount: 20000
   },
   {

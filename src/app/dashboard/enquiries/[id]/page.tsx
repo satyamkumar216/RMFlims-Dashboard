@@ -94,7 +94,7 @@ export default function EnquiryDetailPage() {
   // Payment states
   const [paymentStatus, setPaymentStatus] = useState<'due' | 'advance_paid' | 'fully_paid'>('due')
   const [paymentMethod, setPaymentMethod] = useState<string>('')
-  const [paymentTimeline, setPaymentTimeline] = useState<string>('after_shoot')
+  const [paymentTimeline, setPaymentTimeline] = useState<string>('custom')
   const [paidAmount, setPaidAmount] = useState<string>('')
 
   // Receipt Modal State
@@ -247,16 +247,13 @@ export default function EnquiryDetailPage() {
       setPaidAmount('0')
     } else if (val === 'fully_paid') {
       setPaidAmount(agreedPrice)
-      setPaymentTimeline('before_shoot')
+      setPaymentTimeline('100_advance')
       if (paymentMethod === '') {
         setPaymentMethod('UPI')
       }
     } else if (val === 'advance_paid') {
-      if (agreedPrice && (paidAmount === '' || parseFloat(paidAmount) === 0 || parseFloat(paidAmount) === parseFloat(agreedPrice))) {
-        setPaidAmount(String(parseFloat(agreedPrice) / 2))
-      }
-      if (paymentTimeline === 'before_shoot' || paymentTimeline === 'after_shoot') {
-        setPaymentTimeline('split_50_50')
+      if (paymentTimeline !== '100_advance' && paymentTimeline !== 'pay_on_delivery') {
+        setPaymentTimeline('custom')
       }
     }
   }
@@ -284,7 +281,8 @@ export default function EnquiryDetailPage() {
           setLocation(found.location || '')
           setPaymentStatus(found.payment_status || 'due')
           setPaymentMethod(found.payment_method || '')
-          setPaymentTimeline(found.payment_timeline || 'after_shoot')
+          const rawTimeline = found.payment_timeline || 'custom';
+          setPaymentTimeline(rawTimeline === '100_advance' || rawTimeline === 'pay_on_delivery' ? rawTimeline : 'custom')
           setPaidAmount(found.paid_amount !== undefined && found.paid_amount !== null ? String(found.paid_amount) : '')
         } else {
           setErrorMsg('Enquiry not found.')
@@ -316,7 +314,8 @@ export default function EnquiryDetailPage() {
           setLocation(data.location || '')
           setPaymentStatus(data.payment_status || 'due')
           setPaymentMethod(data.payment_method || '')
-          setPaymentTimeline(data.payment_timeline || 'after_shoot')
+          const rawTimeline = data.payment_timeline || 'custom';
+          setPaymentTimeline(rawTimeline === '100_advance' || rawTimeline === 'pay_on_delivery' ? rawTimeline : 'custom')
           setPaidAmount(data.paid_amount !== undefined && data.paid_amount !== null ? String(data.paid_amount) : '')
         }
       } catch (err) {
@@ -451,6 +450,11 @@ export default function EnquiryDetailPage() {
             receiptNumber = await generateUniqueReceiptNumber(null, true, demoBookings)
           }
 
+          const resolvedPaymentTerms = 
+            paymentTimeline === '100_advance' ? '100% Advance' :
+            paymentTimeline === 'pay_on_delivery' ? 'Pay on Delivery' :
+            'Custom — see amounts below';
+
           if (existingBookingIdx !== -1) {
             demoBookings[existingBookingIdx] = {
               ...demoBookings[existingBookingIdx],
@@ -468,7 +472,7 @@ export default function EnquiryDetailPage() {
               balance_due: finalBalance,
               payment_status: payStatus,
               payment_method: paymentMethod || 'UPI',
-              payment_terms: paymentTimeline || '50% Advance / 50% After Shoot',
+              payment_terms: resolvedPaymentTerms,
               booking_status: 'confirmed',
               admin_notes: notes || ''
             }
@@ -492,7 +496,7 @@ export default function EnquiryDetailPage() {
               balance_due: finalBalance,
               payment_status: payStatus,
               payment_method: paymentMethod || 'UPI',
-              payment_terms: paymentTimeline || '50% Advance / 50% After Shoot',
+              payment_terms: resolvedPaymentTerms,
               booking_status: 'confirmed',
               receipt_number: receiptNumber,
               created_at: new Date().toISOString()
@@ -624,6 +628,11 @@ export default function EnquiryDetailPage() {
             .eq('enquiry_id', id)
             .maybeSingle()
 
+          const resolvedPaymentTerms = 
+            paymentTimeline === '100_advance' ? '100% Advance' :
+            paymentTimeline === 'pay_on_delivery' ? 'Pay on Delivery' :
+            'Custom — see amounts below';
+
           if (existingBooking) {
             await supabase
               .from('bookings')
@@ -641,7 +650,7 @@ export default function EnquiryDetailPage() {
                 balance_due: finalBalance,
                 payment_status: payStatus,
                 payment_method: paymentMethod || 'UPI',
-                payment_terms: paymentTimeline || '50% Advance / 50% After Shoot',
+                payment_terms: resolvedPaymentTerms,
                 booking_status: 'confirmed',
                 admin_notes: notes || '',
                 special_requirements: notes || ''
@@ -671,7 +680,7 @@ export default function EnquiryDetailPage() {
                 balance_due: finalBalance,
                 payment_status: payStatus,
                 payment_method: paymentMethod || 'UPI',
-                payment_terms: paymentTimeline || '50% Advance / 50% After Shoot',
+                payment_terms: resolvedPaymentTerms,
                 booking_status: 'confirmed',
                 admin_notes: notes || '',
                 special_requirements: notes || '',
@@ -1155,9 +1164,9 @@ export default function EnquiryDetailPage() {
                     onChange={(e) => setPaymentTimeline(e.target.value)}
                     className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold cursor-pointer"
                   >
-                    <option value="after_shoot" disabled={paymentStatus === 'fully_paid'}>Pay After Shoot</option>
-                    <option value="before_shoot">Pay Before Shoot</option>
-                    <option value="split_50_50" disabled={paymentStatus === 'fully_paid'}>50% Advance / 50% After Shoot</option>
+                    <option value="custom">Custom — see amounts below</option>
+                    <option value="100_advance">100% Advance</option>
+                    <option value="pay_on_delivery">Pay on Delivery</option>
                   </select>
                 </div>
               </div>
@@ -1356,10 +1365,9 @@ export default function EnquiryDetailPage() {
                 <div className="space-y-1 bg-sidebar-active/40 print:bg-gray-50 p-3 rounded-lg border border-border-base print:border-gray-200 max-w-xs text-txt-secondary print:text-gray-500">
                   <h5 className="font-bold text-txt-primary print:text-gray-700 uppercase tracking-wider text-[10px] mb-1">Payment Details</h5>
                   <p>Terms: <span className="font-semibold text-txt-primary print:text-black">{
-                    paymentTimeline === 'before_shoot' ? 'Pay Before Shoot' :
-                    paymentTimeline === 'after_shoot' ? 'Pay After Shoot' :
-                    paymentTimeline === 'split_50_50' ? '50% Advance / 50% After' :
-                    'Pay After Shoot'
+                    paymentTimeline === '100_advance' ? '100% Advance' :
+                    paymentTimeline === 'pay_on_delivery' ? 'Pay on Delivery' :
+                    'Custom — see amounts below'
                   }</span></p>
                   <p>Method: <span className="font-semibold text-txt-primary print:text-black">{paymentMethod || 'Awaiting / None'}</span></p>
                   <p className="flex items-center gap-1.5">Status: <span className={`font-bold ${

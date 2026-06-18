@@ -121,7 +121,7 @@ export default function BookingsPage() {
   const [editAdvancePaid, setEditAdvancePaid] = useState('')
   const [editPaymentStatus, setEditPaymentStatus] = useState<'due' | 'partial' | 'paid'>('due')
   const [editPaymentMethod, setEditPaymentMethod] = useState('UPI')
-  const [editPaymentTerms, setEditPaymentTerms] = useState('50% Advance / 50% After Shoot')
+  const [editPaymentTerms, setEditPaymentTerms] = useState('Custom — see amounts below')
   const [editLeadPhotographer, setEditLeadPhotographer] = useState('')
   const [editSecondShooter, setEditSecondShooter] = useState('')
   const [editVideographer, setEditVideographer] = useState('')
@@ -148,7 +148,7 @@ export default function BookingsPage() {
   const [addAdvancePaid, setAddAdvancePaid] = useState('')
   const [addPaymentStatus, setAddPaymentStatus] = useState<'due' | 'partial' | 'paid'>('due')
   const [addPaymentMethod, setAddPaymentMethod] = useState('UPI')
-  const [addPaymentTerms, setAddPaymentTerms] = useState('50% Advance / 50% After Shoot')
+  const [addPaymentTerms, setAddPaymentTerms] = useState('Custom — see amounts below')
   const [addCustomTermsText, setAddCustomTermsText] = useState('')
   const [addLeadPhotographer, setAddLeadPhotographer] = useState('')
   const [addSecondShooter, setAddSecondShooter] = useState('')
@@ -179,6 +179,11 @@ export default function BookingsPage() {
   const [editClientNameError, setEditClientNameError] = useState('')
   const [editAgreedPriceError, setEditAgreedPriceError] = useState('')
 
+  // Dynamic percentages for receipt view
+  const receiptAgreedPrice = receiptBooking ? Number(receiptBooking.agreed_price || 0) : 0
+  const receiptAdvancePaid = receiptBooking ? Number(receiptBooking.advance_paid || 0) : 0
+  const receiptAdvancePct = receiptAgreedPrice > 0 ? (receiptAdvancePaid / receiptAgreedPrice) * 100 : 0
+  const receiptBalancePct = Math.max(0, 100 - receiptAdvancePct)
 
   // Load Data
   useEffect(() => {
@@ -444,7 +449,12 @@ export default function BookingsPage() {
     setEditAdvancePaid(String(b.advance_paid))
     setEditPaymentStatus(b.payment_status)
     setEditPaymentMethod(b.payment_method)
-    setEditPaymentTerms(b.payment_terms)
+    const terms = b.payment_terms || 'Custom — see amounts below';
+    if (terms === '100% Advance' || terms === 'Pay on Delivery') {
+      setEditPaymentTerms(terms)
+    } else {
+      setEditPaymentTerms('Custom — see amounts below')
+    }
     setEditLeadPhotographer(b.lead_photographer || '')
     setEditSecondShooter(b.second_shooter || '')
     setEditVideographer(b.videographer || '')
@@ -746,7 +756,7 @@ export default function BookingsPage() {
     const advanceNum = Number(addAdvancePaid || 0);
     const balanceNum = Math.max(0, priceNum - advanceNum);
 
-    const finalTerms = addPaymentTerms === 'Custom Terms' ? addCustomTermsText : addPaymentTerms;
+    const finalTerms = addPaymentTerms;
 
     const tempEventId = 'event-' + Date.now();
     const tempBookingId = 'booking-' + Date.now();
@@ -1629,6 +1639,20 @@ export default function BookingsPage() {
                 </div>
 
                 <div className="space-y-1">
+                  <label className="text-xs font-bold text-txt-muted">Advance Percentage</label>
+                  <input
+                    type="text"
+                    value={
+                      Number(addAgreedPrice || 0) > 0
+                        ? `${((Number(addAdvancePaid || 0) / Number(addAgreedPrice)) * 100).toFixed(1)}% advance received`
+                        : '0.0% advance received'
+                    }
+                    readOnly
+                    className="w-full px-3 py-2 border border-border-base rounded-lg text-sm bg-sidebar-active text-txt-secondary font-bold focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="space-y-1">
                   <label className="text-xs font-bold text-txt-primary">Payment Status (auto calculated)</label>
                   <input
                     type="text"
@@ -1660,24 +1684,11 @@ export default function BookingsPage() {
                     onChange={e => setAddPaymentTerms(e.target.value)}
                     className="w-full px-3 py-2 border border-input-border rounded-lg text-sm bg-input-base text-txt-secondary focus:outline-hidden focus:ring-1 focus:ring-txt-primary cursor-pointer"
                   >
-                    <option value="50% Advance / 50% After Shoot">50% Advance / 50% After Shoot</option>
+                    <option value="Custom — see amounts below">Custom — see amounts below</option>
                     <option value="100% Advance">100% Advance</option>
-                    <option value="Custom Terms">Custom Terms</option>
+                    <option value="Pay on Delivery">Pay on Delivery</option>
                   </select>
                 </div>
-
-                {addPaymentTerms === 'Custom Terms' && (
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-xs font-bold text-txt-primary">Specify Custom Payment Terms</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 25% booking, 50% shoot day, 25% deliverables"
-                      value={addCustomTermsText}
-                      onChange={e => setAddCustomTermsText(e.target.value)}
-                      className="w-full px-3 py-2 border border-input-border rounded-lg text-sm bg-input-base text-txt-primary placeholder-txt-muted focus:outline-hidden focus:ring-1 focus:ring-txt-primary"
-                    />
-                  </div>
-                )}
               </div>
             </div>
 
@@ -2062,10 +2073,10 @@ export default function BookingsPage() {
                 />
               </div>
 
-              {/* Price agreed & Paid */}
+              {/* Pricing & Payment details */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-txt-muted">Agreed Price (₹)</label>
+                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-txt-muted font-bold">Agreed Price (₹)</label>
                   <input
                     type="number"
                     value={editAgreedPrice}
@@ -2085,7 +2096,7 @@ export default function BookingsPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-txt-muted">Advance Paid (₹)</label>
+                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-txt-muted font-bold">Advance Paid (₹)</label>
                   <input
                     type="number"
                     value={editAdvancePaid}
@@ -2093,11 +2104,58 @@ export default function BookingsPage() {
                     className="w-full border border-input-border bg-input-base text-txt-primary rounded-lg px-3 py-1.5 text-xs focus:outline-hidden focus:border-txt-primary focus:ring-txt-primary"
                   />
                 </div>
-              </div>
 
-              <div className="bg-sidebar-active p-3 rounded-lg border border-border-base flex justify-between items-center text-xs font-semibold text-txt-secondary">
-                <span>Balance Remaining:</span>
-                <span className="text-sm font-bold text-txt-primary">₹{computedEditBalance.toLocaleString('en-IN')}</span>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-txt-muted font-bold">Balance Due (₹)</label>
+                  <input
+                    type="text"
+                    value={'₹' + computedEditBalance.toLocaleString('en-IN')}
+                    readOnly
+                    className="w-full border border-border-base bg-sidebar-active text-txt-secondary font-bold rounded-lg px-3 py-1.5 text-xs focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-txt-muted font-bold">Advance Percentage</label>
+                  <input
+                    type="text"
+                    value={
+                      Number(editAgreedPrice || 0) > 0
+                        ? `${((Number(editAdvancePaid || 0) / Number(editAgreedPrice)) * 100).toFixed(1)}% advance received`
+                        : '0.0% advance received'
+                    }
+                    readOnly
+                    className="w-full border border-border-base bg-sidebar-active text-txt-secondary font-bold rounded-lg px-3 py-1.5 text-xs focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-txt-muted font-bold">Payment Method</label>
+                  <select
+                    value={editPaymentMethod}
+                    onChange={e => setEditPaymentMethod(e.target.value)}
+                    className="w-full border border-input-border bg-input-base text-txt-secondary rounded-lg px-2.5 py-1.5 text-xs focus:outline-hidden focus:ring-1 focus:ring-txt-primary cursor-pointer"
+                  >
+                    <option value="UPI">UPI (GPay/PhonePe)</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Cheque">Cheque</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-txt-muted font-bold">Payment Terms</label>
+                  <select
+                    value={editPaymentTerms}
+                    onChange={e => setEditPaymentTerms(e.target.value)}
+                    className="w-full border border-input-border bg-input-base text-txt-secondary rounded-lg px-2.5 py-1.5 text-xs focus:outline-hidden focus:ring-1 focus:ring-txt-primary cursor-pointer"
+                  >
+                    <option value="Custom — see amounts below">Custom — see amounts below</option>
+                    <option value="100% Advance">100% Advance</option>
+                    <option value="Pay on Delivery">Pay on Delivery</option>
+                  </select>
+                </div>
               </div>
 
               {/* Client Email and Phone */}
@@ -2332,14 +2390,14 @@ export default function BookingsPage() {
                     <span className="font-medium text-txt-primary print:text-black">{formatPrice(receiptBooking.agreed_price)}</span>
                   </div>
                   <div className="flex justify-between text-txt-secondary print:text-gray-500 text-xs font-semibold">
-                    <span>Amount Paid</span>
-                    <span className="font-medium text-txt-primary print:text-black">{formatPrice(receiptBooking.advance_paid)}</span>
+                    <span>Advance Received</span>
+                    <span className="font-medium text-txt-primary print:text-black">{formatPrice(receiptBooking.advance_paid)} ({receiptAdvancePct.toFixed(1)}% of total)</span>
                   </div>
                   <hr className="border-border-base print:border-gray-200" />
                   <div className="flex justify-between font-bold text-base text-txt-primary print:text-black">
                     <span>Balance Due</span>
                     <span className={receiptBooking.balance_due > 0 ? "text-red-500 print:text-red-600" : "text-emerald-500 print:text-green-600"}>
-                      {formatPrice(receiptBooking.balance_due)}
+                      {formatPrice(receiptBooking.balance_due)} ({receiptBalancePct.toFixed(1)}% remaining)
                     </span>
                   </div>
                 </div>
