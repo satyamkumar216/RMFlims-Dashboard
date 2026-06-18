@@ -4,9 +4,8 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/utils/supabase/client'
 import { isDemoMode, getDemoEvents, saveDemoEvents, getDemoEnquiries, saveDemoEnquiries, getDemoBookings, saveDemoBookings } from '@/utils/supabase/demo'
+import { MultiDatePicker, parseEventDates, formatMultiDates } from '@/components/MultiDatePicker'
 import { 
-  ChevronLeft, 
-  ChevronRight, 
   Plus, 
   Trash2, 
   Edit2, 
@@ -15,7 +14,9 @@ import {
   User, 
   FileText,
   Check,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 
 interface CalendarEvent {
@@ -24,6 +25,7 @@ interface CalendarEvent {
   title: string
   event_date: string
   event_end_date?: string | null
+  event_dates?: string | null  // NEW: comma-separated YYYY-MM-DD for multi-date events
   event_type: 'marriage' | 'brand_photoshoot' | 'portfolio_shoot' | 'model_shoot' | 'reel_shoot' | 'manual_shoot' | 'blocked'
   team_member: string | null
   notes: string | null
@@ -183,12 +185,12 @@ export default function CalendarPage() {
 
   // Form inputs for Add/Edit
   const [eventTitle, setEventTitle] = useState('')
-  const [eventDateInput, setEventDateInput] = useState('')
-  const [eventEndDateInput, setEventEndDateInput] = useState('')
+  const [eventDatesSelected, setEventDatesSelected] = useState<string[]>([])  // YYYY-MM-DD[]
   const [eventTypeInput, setEventTypeInput] = useState<CalendarEvent['event_type']>('manual_shoot')
   const [teamMember, setTeamMember] = useState('')
   const [eventNotes, setEventNotes] = useState('')
   const [formSaving, setFormSaving] = useState(false)
+  const [eventDatesError, setEventDatesError] = useState<string>('')
 
   // Extra slide-in panel states
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -200,49 +202,7 @@ export default function CalendarPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'delete' | null }>({ message: '', type: null })
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  // Custom calendar picker states
-  const [openCalendar, setOpenCalendar] = useState<'addStart' | 'addEnd' | 'editStart' | 'editEnd' | null>(null)
-  const [calendarViewDate, setCalendarViewDate] = useState<Date>(new Date())
-
-  // Date picker refs (for click outside detection)
-  const addStartCalendarRef = React.useRef<HTMLDivElement>(null)
-  const addEndCalendarRef = React.useRef<HTMLDivElement>(null)
-  const editStartCalendarRef = React.useRef<HTMLDivElement>(null)
-  const editEndCalendarRef = React.useRef<HTMLDivElement>(null)
-
-  // Click outside listener for custom calendar popups
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      const target = event.target as HTMLElement
-      if (openCalendar === 'addStart' && addStartCalendarRef.current && !addStartCalendarRef.current.contains(target)) {
-        if (!target.closest('.add-start-date-toggle')) {
-          setOpenCalendar(null)
-        }
-      }
-      if (openCalendar === 'addEnd' && addEndCalendarRef.current && !addEndCalendarRef.current.contains(target)) {
-        if (!target.closest('.add-end-date-toggle')) {
-          setOpenCalendar(null)
-        }
-      }
-      if (openCalendar === 'editStart' && editStartCalendarRef.current && !editStartCalendarRef.current.contains(target)) {
-        if (!target.closest('.edit-start-date-toggle')) {
-          setOpenCalendar(null)
-        }
-      }
-      if (openCalendar === 'editEnd' && editEndCalendarRef.current && !editEndCalendarRef.current.contains(target)) {
-        if (!target.closest('.edit-end-date-toggle')) {
-          setOpenCalendar(null)
-        }
-      }
-    }
-
-    if (openCalendar) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [openCalendar])
+  // (Date picker click-outside now handled inside MultiDatePicker component)
 
   // Local YYYY-MM-DD today string
   const todayStr = (() => {
@@ -392,30 +352,27 @@ export default function CalendarPage() {
     return `${y}-${pad(m + 1)}-${pad(d)}`
   }
 
-  // Helper to calculate date strings range between event_date and event_end_date inclusive (DST & timezone immune)
-  const getDatesInRange = (startStr: string, endStrStr?: string | null) => {
+  // Helper to calculate date strings range between start and end inclusive (DST & timezone immune)
+  const getDatesInRange = (startStr: string, endStrIn?: string | null): string[] => {
     if (!startStr) return []
-    const endStr = endStrStr || startStr
-    
+    const endStr = endStrIn || startStr
     const [sY, sM, sD] = startStr.split('-').map(Number)
     const [eY, eM, eD] = endStr.split('-').map(Number)
-    
     const startUTC = Date.UTC(sY, sM - 1, sD)
     const endUTC = Date.UTC(eY, eM - 1, eD)
-    
-    const dates = []
+    const dates: string[] = []
     let currUTC = startUTC
-    
     while (currUTC <= endUTC) {
       const d = new Date(currUTC)
-      const yStr = d.getUTCFullYear()
-      const mStr = String(d.getUTCMonth() + 1).padStart(2, '0')
-      const dStr = String(d.getUTCDate()).padStart(2, '0')
-      dates.push(`${yStr}-${mStr}-${dStr}`)
-      
-      currUTC += 24 * 60 * 60 * 1000
+      dates.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`)
+      currUTC += 86400000
     }
     return dates
+  }
+
+  // NEW: Get the actual active dates for an event — respects multi-date selections
+  const getEventActiveDates = (evt: CalendarEvent): string[] => {
+    return parseEventDates(evt.event_dates, evt.event_date, evt.event_end_date)
   }
 
   const getEventStatus = (evt: CalendarEvent) => {
@@ -426,13 +383,11 @@ export default function CalendarPage() {
   }
 
 
-  // Group events by date string (including multi-day spans)
+  // Group events by date string (supports multi-date non-consecutive selections)
   const eventsByDate = events.reduce((acc, event) => {
-    const dates = getDatesInRange(event.event_date, event.event_end_date)
+    const dates = getEventActiveDates(event)
     dates.forEach(dateStr => {
-      if (!acc[dateStr]) {
-        acc[dateStr] = []
-      }
+      if (!acc[dateStr]) acc[dateStr] = []
       if (!acc[dateStr].some(e => e.id === event.id)) {
         acc[dateStr].push(event)
       }
@@ -450,140 +405,7 @@ export default function CalendarPage() {
     return dbDate
   }
 
-  // Helper: Convert DD/MM/YYYY to YYYY-MM-DD
-  const displayDateToDbDate = (displayDate: string): string => {
-    if (!displayDate) return ''
-    const parts = displayDate.split('/')
-    if (parts.length === 3) {
-      const d = parts[0].padStart(2, '0')
-      const m = parts[1].padStart(2, '0')
-      const y = parts[2]
-      return `${y}-${m}-${d}`
-    }
-    return displayDate
-  }
-
-  // Helper: Validate DD/MM/YYYY format and validity
-  const isInvalidDate = (displayDate: string): boolean => {
-    if (!displayDate) return false
-    const parts = displayDate.split('/')
-    if (parts.length !== 3) return true
-    const [d, m, y] = parts.map(Number)
-    if (isNaN(d) || isNaN(m) || isNaN(y)) return true
-    if (m < 1 || m > 12 || d < 1 || d > 31 || y < 2000 || y > 2100) return true
-    const dt = new Date(y, m - 1, d)
-    return dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d
-  }
-
-  const parseDisplayDate = (displayStr: string): Date | null => {
-    if (!displayStr) return null
-    const parts = displayStr.split('/')
-    if (parts.length === 3) {
-      const [d, m, y] = parts.map(Number)
-      if (!isNaN(d) && !isNaN(m) && !isNaN(y) && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-        const dt = new Date(y, m - 1, d)
-        if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
-          return dt
-        }
-      }
-    }
-    return null
-  }
-
-  const toggleCalendar = (type: 'addStart' | 'addEnd' | 'editStart' | 'editEnd') => {
-    if (openCalendar === type) {
-      setOpenCalendar(null)
-    } else {
-      let dateVal = ''
-      if (type === 'addStart' || type === 'editStart') {
-        dateVal = eventDateInput
-      } else {
-        dateVal = eventEndDateInput
-      }
-      const parsed = parseDisplayDate(dateVal)
-      setCalendarViewDate(parsed || new Date())
-      setOpenCalendar(type)
-    }
-  }
-
-  const renderDaysGrid = (type: 'addStart' | 'addEnd' | 'editStart' | 'editEnd') => {
-    const year = calendarViewDate.getFullYear()
-    const month = calendarViewDate.getMonth()
-    const firstDayIndex = new Date(year, month, 1).getDay()
-    const totalDays = new Date(year, month + 1, 0).getDate()
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const cells = []
-    for (let i = 0; i < firstDayIndex; i++) {
-      cells.push(<div key={`empty-${i}`} className="w-8 h-8" />)
-    }
-
-    const currentSelectedDate = (type === 'addStart' || type === 'editStart') ? eventDateInput : eventEndDateInput
-
-    for (let day = 1; day <= totalDays; day++) {
-      const cellDateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`
-      const cellDateObj = new Date(year, month, day)
-      const isDisabled = cellDateObj < today
-      const isSelected = currentSelectedDate === cellDateStr
-
-      if (isDisabled) {
-        cells.push(
-          <button
-            key={`day-${day}`}
-            type="button"
-            disabled={true}
-            className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-txt-muted/40 cursor-not-allowed"
-            title="Date is in the past"
-          >
-            {day}
-          </button>
-        )
-      } else {
-        cells.push(
-          <button
-            key={`day-${day}`}
-            type="button"
-            onClick={() => {
-              if (type === 'addStart' || type === 'editStart') {
-                setEventDateInput(cellDateStr)
-              } else {
-                setEventEndDateInput(cellDateStr)
-              }
-              setOpenCalendar(null)
-            }}
-            className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold transition-colors hover:bg-sidebar-active ${
-              isSelected 
-                ? 'bg-txt-primary text-bg-base hover:opacity-90' 
-                : 'text-txt-secondary'
-            }`}
-          >
-            {day}
-          </button>
-        )
-      }
-    }
-
-    return cells
-  }
-
-  const handleDateInputChange = (val: string, setter: (v: string) => void) => {
-    let cleaned = val.replace(/[^0-9]/g, '')
-    if (cleaned.length > 8) {
-      cleaned = cleaned.slice(0, 8)
-    }
-    
-    let formatted = cleaned
-    if (cleaned.length > 2) {
-      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2)
-    }
-    if (cleaned.length > 4) {
-      formatted = formatted.slice(0, 5) + '/' + cleaned.slice(4)
-    }
-    
-    setter(formatted)
-  }
+  // (Legacy date helpers kept for potential use in non-form contexts)
 
   // Format Date to DD/MM/YYYY
   const formatDateToDDMMYYYY = (dateStr: string | null | undefined) => {
@@ -625,8 +447,8 @@ export default function CalendarPage() {
   const openAddModal = (dateStr?: string) => {
     const targetDate = dateStr || selectedDateStr || new Date().toISOString().split('T')[0]
     setEventTitle('')
-    setEventDateInput(dbDateToDisplayDate(targetDate))
-    setEventEndDateInput(dbDateToDisplayDate(targetDate))
+    setEventDatesSelected(targetDate ? [targetDate] : [])
+    setEventDatesError('')
     setEventTypeInput('manual_shoot')
     setTeamMember('')
     setEventNotes('')
@@ -639,35 +461,24 @@ export default function CalendarPage() {
 
     setFormSaving(true)
     setErrorMsg(null)
+    setEventDatesError('')
 
-    if (isInvalidDate(eventDateInput)) {
-      setErrorMsg('Please enter a valid Start Date in DD/MM/YYYY format.')
-      setFormSaving(false)
-      return
-    }
-    if (eventEndDateInput && isInvalidDate(eventEndDateInput)) {
-      setErrorMsg('Please enter a valid End Date in DD/MM/YYYY format.')
+    if (eventDatesSelected.length === 0) {
+      setEventDatesError('Please select at least one event date.')
       setFormSaving(false)
       return
     }
 
-    const dbStart = displayDateToDbDate(eventDateInput)
-    const dbEnd = displayDateToDbDate(eventEndDateInput || eventDateInput)
-
-    if (dbEnd < dbStart) {
-      setErrorMsg('End Date cannot be before Start Date.')
-      setFormSaving(false)
-      return
-    }
+    const sorted = [...eventDatesSelected].sort()
+    const dbStart = sorted[0]
+    const dbEnd = sorted[sorted.length - 1]
+    const eventDatesStr = sorted.join(',')
 
     const today = new Date()
-    const y = today.getFullYear()
-    const m = String(today.getMonth() + 1).padStart(2, '0')
-    const d = String(today.getDate()).padStart(2, '0')
-    const todayStr = `${y}-${m}-${d}`
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
     if (dbStart < todayStr) {
-      setErrorMsg('Event date cannot be in the past.')
+      setEventDatesError('Event dates cannot be in the past.')
       setFormSaving(false)
       return
     }
@@ -681,6 +492,7 @@ export default function CalendarPage() {
           title: eventTitle,
           event_date: dbStart,
           event_end_date: dbEnd,
+          event_dates: eventDatesStr,
           event_type: eventTypeInput,
           team_member: teamMember.trim() === '' ? null : teamMember,
           notes: eventNotes.trim() === '' ? null : eventNotes,
@@ -704,14 +516,13 @@ export default function CalendarPage() {
           title: eventTitle,
           event_date: dbStart,
           event_end_date: dbEnd,
+          event_dates: eventDatesStr,
           event_type: eventTypeInput,
           team_member: teamMember.trim() === '' ? null : teamMember,
           notes: eventNotes.trim() === '' ? null : eventNotes
         })
 
-      if (error) {
-        throw new Error(error.message)
-      }
+      if (error) throw new Error(error.message)
 
       setIsAddModalOpen(false)
       fetchEvents()
@@ -745,8 +556,8 @@ export default function CalendarPage() {
   const openEditModal = (event: CalendarEvent) => {
     setEditingEvent(event)
     setEventTitle(event.title)
-    setEventDateInput(dbDateToDisplayDate(event.event_date))
-    setEventEndDateInput(dbDateToDisplayDate(event.event_end_date || event.event_date))
+    setEventDatesSelected(getEventActiveDates(event))
+    setEventDatesError('')
     setEventTypeInput(event.event_type)
     setTeamMember(event.team_member || '')
     setErrorMsg(null)
@@ -811,22 +622,17 @@ export default function CalendarPage() {
   const handleSave = async () => {
     if (!editingEvent) return
 
-    if (isInvalidDate(eventDateInput)) {
-      setErrorMsg('Please enter a valid Start Date in DD/MM/YYYY format.')
-      return
-    }
-    if (eventEndDateInput && isInvalidDate(eventEndDateInput)) {
-      setErrorMsg('Please enter a valid End Date in DD/MM/YYYY format.')
+    setEventDatesError('')
+    if (eventDatesSelected.length === 0) {
+      setEventDatesError('Please select at least one event date.')
+      setErrorMsg('Please select at least one event date.')
       return
     }
 
-    const dbStart = displayDateToDbDate(eventDateInput)
-    const dbEnd = displayDateToDbDate(eventEndDateInput || eventDateInput)
-
-    if (dbEnd < dbStart) {
-      setErrorMsg('End Date cannot be before Start Date.')
-      return
-    }
+    const sorted = [...eventDatesSelected].sort()
+    const dbStart = sorted[0]
+    const dbEnd = sorted[sorted.length - 1]
+    const eventDatesStr = sorted.join(',')
 
     let serializedNotes = eventNotes
     if (!editingEvent.enquiry_id) {
@@ -844,6 +650,7 @@ export default function CalendarPage() {
       title: eventTitle,
       event_date: dbStart,
       event_end_date: dbEnd,
+      event_dates: eventDatesStr,
       event_type: eventTypeInput,
       team_member: teamMember.trim() === '' ? null : teamMember,
       notes: serializedNotes,
@@ -884,6 +691,7 @@ export default function CalendarPage() {
               title: eventTitle,
               event_date: dbStart,
               event_end_date: dbEnd,
+              event_dates: eventDatesStr,
               event_type: eventTypeInput,
               team_member: teamMember.trim() === '' ? null : teamMember,
               notes: serializedNotes
@@ -956,6 +764,7 @@ export default function CalendarPage() {
           title: eventTitle,
           event_date: dbStart,
           event_end_date: dbEnd,
+          event_dates: eventDatesStr,
           event_type: eventTypeInput,
           team_member: teamMember.trim() === '' ? null : teamMember,
           notes: serializedNotes
@@ -1009,6 +818,7 @@ export default function CalendarPage() {
           client_name: clientName,
           event_date_start: dbStart,
           event_date_end: dbEnd || dbStart,
+          event_dates: eventDatesStr,
           location: eventLocation,
           package: eventPackage,
           agreed_price: finalPrice,
@@ -1208,13 +1018,13 @@ export default function CalendarPage() {
               // 2. Sort: earliest start first, then longest span first, then stable ID
               activeEvents.sort((a, b) => {
                 if (a.event_date !== b.event_date) return a.event_date.localeCompare(b.event_date)
-                const aLen = getDatesInRange(a.event_date, a.event_end_date).length
-                const bLen = getDatesInRange(b.event_date, b.event_end_date).length
+                const aLen = getEventActiveDates(a).length
+                const bLen = getEventActiveDates(b).length
                 if (aLen !== bLen) return bLen - aLen
                 return a.id.localeCompare(b.id)
               })
 
-              // 3. Assign lanes and build segments
+              // 3. Assign lanes and build segments (handles non-consecutive multi-date events)
               interface Segment {
                 event: CalendarEvent
                 lane: number
@@ -1227,44 +1037,63 @@ export default function CalendarPage() {
               const segments: Segment[] = []
 
               activeEvents.forEach(evt => {
-                const evtDates = getDatesInRange(evt.event_date, evt.event_end_date)
+                const evtDates = getEventActiveDates(evt)
                 const weekDates = week.map(c => c.dateStr)
-                let startCol = -1
-                let endCol = -1
+
+                // Find which columns in this week are selected for this event
+                const selectedCols: number[] = []
                 for (let i = 0; i < 7; i++) {
                   if (weekDates[i] && evtDates.includes(weekDates[i] as string)) {
-                    if (startCol === -1) startCol = i
-                    endCol = i
+                    selectedCols.push(i)
                   }
                 }
-                if (startCol === -1) return
+                if (selectedCols.length === 0) return
 
-                // Find first free lane
+                // Group selected columns into consecutive runs
+                const runs: number[][] = [[selectedCols[0]]]
+                for (let i = 1; i < selectedCols.length; i++) {
+                  if (selectedCols[i] === selectedCols[i - 1] + 1) {
+                    runs[runs.length - 1].push(selectedCols[i])
+                  } else {
+                    runs.push([selectedCols[i]])
+                  }
+                }
+
+                // Find a lane where ALL selected cols for this event are free
                 let lane = 0
                 while (true) {
                   if (!lanes[lane]) lanes[lane] = Array(7).fill(null)
                   let free = true
-                  for (let c = startCol; c <= endCol; c++) {
-                    if (lanes[lane][c] !== null) { free = false; break }
+                  for (const col of selectedCols) {
+                    if (lanes[lane][col] !== null && lanes[lane][col] !== evt.id) { free = false; break }
                   }
                   if (free) break
                   lane++
                 }
 
-                // Occupy
+                // Occupy all selected cols in this lane
                 if (!lanes[lane]) lanes[lane] = Array(7).fill(null)
-                for (let c = startCol; c <= endCol; c++) {
-                  lanes[lane][c] = evt.id
+                for (const col of selectedCols) {
+                  lanes[lane][col] = evt.id
                 }
 
-                segments.push({
-                  event: evt,
-                  lane,
-                  startCol,
-                  endCol,
-                  isEventStart: weekDates[startCol] === evt.event_date,
-                  isEventEnd: weekDates[endCol] === (evt.event_end_date || evt.event_date)
-                })
+                // Create one segment per consecutive run
+                const sortedEvtDates = [...evtDates].sort()
+                const firstEvtDate = sortedEvtDates[0]
+                const lastEvtDate = sortedEvtDates[sortedEvtDates.length - 1]
+
+                for (const run of runs) {
+                  const runStartCol = run[0]
+                  const runEndCol = run[run.length - 1]
+                  segments.push({
+                    event: evt,
+                    lane,
+                    startCol: runStartCol,
+                    endCol: runEndCol,
+                    isEventStart: weekDates[runStartCol] === firstEvtDate,
+                    isEventEnd: weekDates[runEndCol] === lastEvtDate
+                  })
+                }
               })
 
               const MAX_VISIBLE_LANES = 3
@@ -1277,9 +1106,7 @@ export default function CalendarPage() {
               const hiddenByDay: number[] = Array(7).fill(0)
               segments.forEach(seg => {
                 if (seg.lane >= MAX_VISIBLE_LANES) {
-                  for (let c = seg.startCol; c <= seg.endCol; c++) {
-                    hiddenByDay[c]++
-                  }
+                  hiddenByDay[seg.startCol]++
                 }
               })
 
@@ -1409,7 +1236,7 @@ export default function CalendarPage() {
                           openEditModal(seg.event)
                         }}
                         style={barStyle}
-                        title={`${seg.event.title} (${seg.event.event_date} → ${seg.event.event_end_date || seg.event.event_date})`}
+                        title={`${seg.event.title} — ${formatMultiDates(getEventActiveDates(seg.event))}`}
                         className="select-none"
                       >
                         {seg.isEventStart ? (
@@ -1600,14 +1427,11 @@ export default function CalendarPage() {
                       </div>
 
                       <div className="space-y-2.5 text-xs text-txt-secondary border-t border-border-base/50 pt-3">
-                        {/* Date span */}
+                        {/* Date(s) */}
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] font-bold text-txt-muted uppercase tracking-wider">Date Span</span>
+                          <span className="text-[10px] font-bold text-txt-muted uppercase tracking-wider">Event Date(s)</span>
                           <span className="font-semibold text-txt-primary">
-                            {formatDateToDDMMYYYY(evt.event_date)}
-                            {evt.event_end_date && evt.event_end_date !== evt.event_date && (
-                              <> to {formatDateToDDMMYYYY(evt.event_end_date)}</>
-                            )}
+                            {formatMultiDates(getEventActiveDates(evt))}
                           </span>
                         </div>
 
@@ -1698,148 +1522,13 @@ export default function CalendarPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-txt-secondary uppercase tracking-wider mb-1">
-                    Event Date (Start)
-                  </label>
-                  <div className="relative flex flex-col justify-start">
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        required
-                        placeholder="DD/MM/YYYY"
-                        value={eventDateInput}
-                        onChange={(e) => handleDateInputChange(e.target.value, setEventDateInput)}
-                        onFocus={() => {
-                          const parsed = parseDisplayDate(eventDateInput)
-                          setCalendarViewDate(parsed || new Date())
-                          setOpenCalendar('addStart')
-                        }}
-                        className="block w-full rounded-lg border border-input-border bg-input-base pl-3 pr-10 py-2 text-txt-primary placeholder-txt-muted focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary sm:text-sm transition-all font-medium"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCalendar('addStart')}
-                        className="add-start-date-toggle absolute right-2 text-txt-muted hover:text-txt-primary p-1 rounded hover:bg-sidebar-active transition-colors cursor-pointer"
-                        title="Select date"
-                      >
-                        <CalendarIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* Custom Calendar Popup */}
-                    {openCalendar === 'addStart' && (
-                      <div 
-                        ref={addStartCalendarRef}
-                        className="absolute left-0 top-full mt-1 z-[9999] bg-modal-base border border-border-base rounded-xl shadow-lg p-3 w-64 text-sm text-txt-primary select-none animate-fadeIn"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                          <span className="font-bold">
-                            {calendarViewDate.toLocaleString('default', { month: 'long' })} {calendarViewDate.getFullYear()}
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-txt-muted mb-1">
-                          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                          {renderDaysGrid('addStart')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-txt-secondary uppercase tracking-wider mb-1">
-                    Event Date (End)
-                  </label>
-                  <div className="relative flex flex-col justify-start">
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        required
-                        placeholder="DD/MM/YYYY"
-                        value={eventEndDateInput}
-                        onChange={(e) => handleDateInputChange(e.target.value, setEventEndDateInput)}
-                        onFocus={() => {
-                          const parsed = parseDisplayDate(eventEndDateInput)
-                          setCalendarViewDate(parsed || new Date())
-                          setOpenCalendar('addEnd')
-                        }}
-                        className="block w-full rounded-lg border border-input-border bg-input-base pl-3 pr-10 py-2 text-txt-primary placeholder-txt-muted focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary sm:text-sm transition-all font-medium"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCalendar('addEnd')}
-                        className="add-end-date-toggle absolute right-2 text-txt-muted hover:text-txt-primary p-1 rounded hover:bg-sidebar-active transition-colors cursor-pointer"
-                        title="Select date"
-                      >
-                        <CalendarIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* Custom Calendar Popup */}
-                    {openCalendar === 'addEnd' && (
-                      <div 
-                        ref={addEndCalendarRef}
-                        className="absolute left-0 top-full mt-1 z-[9999] bg-modal-base border border-border-base rounded-xl shadow-lg p-3 w-64 text-sm text-txt-primary select-none animate-fadeIn"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                          <span className="font-bold">
-                            {calendarViewDate.toLocaleString('default', { month: 'long' })} {calendarViewDate.getFullYear()}
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-txt-muted mb-1">
-                          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                          {renderDaysGrid('addEnd')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <MultiDatePicker
+                label="Event Date(s)"
+                selectedDates={eventDatesSelected}
+                onChange={setEventDatesSelected}
+                placeholder="Click to select event dates"
+                error={eventDatesError}
+              />
 
               <div className="grid grid-cols-1 gap-4">
                 <div>
@@ -2016,149 +1705,15 @@ export default function CalendarPage() {
                 </select>
               </div>
 
-              {/* Start and End Dates */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-txt-secondary uppercase tracking-wider mb-1.5">
-                    Start Date
-                  </label>
-                  <div className="relative flex flex-col justify-start">
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        required
-                        placeholder="DD/MM/YYYY"
-                        value={eventDateInput}
-                        onChange={(e) => handleDateInputChange(e.target.value, setEventDateInput)}
-                        onFocus={() => {
-                          const parsed = parseDisplayDate(eventDateInput)
-                          setCalendarViewDate(parsed || new Date())
-                          setOpenCalendar('editStart')
-                        }}
-                        className="block w-full rounded-lg border border-input-border bg-input-base pl-3 pr-10 py-2.5 text-txt-primary placeholder-txt-muted focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary sm:text-sm font-medium transition-all"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCalendar('editStart')}
-                        className="edit-start-date-toggle absolute right-2.5 text-txt-muted hover:text-txt-primary p-1 rounded hover:bg-sidebar-active transition-colors cursor-pointer"
-                        title="Select date"
-                      >
-                        <CalendarIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* Custom Calendar Popup */}
-                    {openCalendar === 'editStart' && (
-                      <div 
-                        ref={editStartCalendarRef}
-                        className="absolute left-0 top-full mt-1 z-[9999] bg-modal-base border border-border-base rounded-xl shadow-lg p-3 w-64 text-sm text-txt-primary select-none animate-fadeIn"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                          <span className="font-bold">
-                            {calendarViewDate.toLocaleString('default', { month: 'long' })} {calendarViewDate.getFullYear()}
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-txt-muted mb-1">
-                          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                          {renderDaysGrid('editStart')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-txt-secondary uppercase tracking-wider mb-1.5">
-                    End Date
-                  </label>
-                  <div className="relative flex flex-col justify-start">
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        required
-                        placeholder="DD/MM/YYYY"
-                        value={eventEndDateInput}
-                        onChange={(e) => handleDateInputChange(e.target.value, setEventEndDateInput)}
-                        onFocus={() => {
-                          const parsed = parseDisplayDate(eventEndDateInput)
-                          setCalendarViewDate(parsed || new Date())
-                          setOpenCalendar('editEnd')
-                        }}
-                        className="block w-full rounded-lg border border-input-border bg-input-base pl-3 pr-10 py-2.5 text-txt-primary placeholder-txt-muted focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary sm:text-sm font-medium transition-all"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCalendar('editEnd')}
-                        className="edit-end-date-toggle absolute right-2.5 text-txt-muted hover:text-txt-primary p-1 rounded hover:bg-sidebar-active transition-colors cursor-pointer"
-                        title="Select date"
-                      >
-                        <CalendarIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* Custom Calendar Popup */}
-                    {openCalendar === 'editEnd' && (
-                      <div 
-                        ref={editEndCalendarRef}
-                        className="absolute left-0 top-full mt-1 z-[9999] bg-modal-base border border-border-base rounded-xl shadow-lg p-3 w-64 text-sm text-txt-primary select-none animate-fadeIn"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                          <span className="font-bold">
-                            {calendarViewDate.toLocaleString('default', { month: 'long' })} {calendarViewDate.getFullYear()}
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-txt-muted mb-1">
-                          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                          {renderDaysGrid('editEnd')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              {/* Event Date(s) — Multi-date picker */}
+              <MultiDatePicker
+                label="Event Date(s)"
+                selectedDates={eventDatesSelected}
+                onChange={setEventDatesSelected}
+                placeholder="Click to select event dates"
+                error={eventDatesError}
+                allowPast={true}
+              />
 
               {/* Event Type / Color Portfolio */}
               <div>

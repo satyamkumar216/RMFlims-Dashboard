@@ -6,7 +6,8 @@ import Link from 'next/link'
 import { createClient } from '@/utils/supabase/client'
 import { isDemoMode, getDemoEnquiries, saveDemoEnquiries, getDemoEvents, saveDemoEvents, getDemoBookings, saveDemoBookings } from '@/utils/supabase/demo'
 import { generateUniqueReceiptNumber } from '@/utils/invoice'
-import { ArrowLeft, Save, ShieldAlert, CheckCircle2, Loader2, Printer, X, FileText, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react'
+import { MultiDatePicker, parseEventDates, formatMultiDates } from '@/components/MultiDatePicker'
+import { ArrowLeft, Save, ShieldAlert, CheckCircle2, Loader2, Printer, X, FileText } from 'lucide-react'
 
 interface Enquiry {
   id: string
@@ -16,6 +17,7 @@ interface Enquiry {
   package: string
   event_date: string
   event_end_date?: string | null
+  event_dates?: string | null  // NEW: comma-separated YYYY-MM-DD for multi-date events
   message: string
   agreed_price: number | null
   status: 'new' | 'in_progress' | 'confirmed' | 'cancelled'
@@ -80,8 +82,7 @@ export default function EnquiryDetailPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
-  const [eventDate, setEventDate] = useState('')
-  const [eventEndDate, setEventEndDate] = useState('')
+  const [eventDates, setEventDates] = useState<string[]>([])  // YYYY-MM-DD[] for multi-date selection
   const [packageName, setPackageName] = useState('')
   const [agreedPrice, setAgreedPrice] = useState<string>('')
   const [status, setStatus] = useState<Enquiry['status']>('new')
@@ -101,139 +102,10 @@ export default function EnquiryDetailPage() {
   // Receipt Modal State
   const [showReceipt, setShowReceipt] = useState(false)
 
-  // Custom calendar picker states
-  const [openCalendar, setOpenCalendar] = useState<'start' | 'end' | null>(null)
-  const [calendarViewDate, setCalendarViewDate] = useState<Date>(new Date())
-  const startCalendarRef = React.useRef<HTMLDivElement>(null)
-  const endCalendarRef = React.useRef<HTMLDivElement>(null)
+  // Event dates error
+  const [eventDatesError, setEventDatesError] = useState<string>('')
 
-  // Click outside listener for custom calendar popups
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (openCalendar === 'start' && startCalendarRef.current && !startCalendarRef.current.contains(event.target as Node)) {
-        const clickedToggle = (event.target as HTMLElement).closest('.start-date-toggle')
-        if (!clickedToggle) {
-          setOpenCalendar(null)
-        }
-      }
-      if (openCalendar === 'end' && endCalendarRef.current && !endCalendarRef.current.contains(event.target as Node)) {
-        const clickedToggle = (event.target as HTMLElement).closest('.end-date-toggle')
-        if (!clickedToggle) {
-          setOpenCalendar(null)
-        }
-      }
-    }
-
-    if (openCalendar) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [openCalendar])
-
-  const parseDisplayDate = (displayStr: string): Date | null => {
-    if (!displayStr) return null
-    const parts = displayStr.split('/')
-    if (parts.length === 3) {
-      const [d, m, y] = parts.map(Number)
-      if (!isNaN(d) && !isNaN(m) && !isNaN(y) && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-        const dt = new Date(y, m - 1, d)
-        if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
-          return dt
-        }
-      }
-    }
-    return null
-  }
-
-  const toggleCalendar = (type: 'start' | 'end') => {
-    if (openCalendar === type) {
-      setOpenCalendar(null)
-    } else {
-      const dateVal = type === 'start' ? eventDate : eventEndDate
-      const parsed = parseDisplayDate(dateVal)
-      setCalendarViewDate(parsed || new Date())
-      setOpenCalendar(type)
-    }
-  }
-
-  const renderDaysGrid = (type: 'start' | 'end') => {
-    const year = calendarViewDate.getFullYear()
-    const month = calendarViewDate.getMonth()
-    const firstDayIndex = new Date(year, month, 1).getDay()
-    const totalDays = new Date(year, month + 1, 0).getDate()
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const cells = []
-    for (let i = 0; i < firstDayIndex; i++) {
-      cells.push(<div key={`empty-${i}`} className="w-8 h-8" />)
-    }
-
-    for (let day = 1; day <= totalDays; day++) {
-      const cellDateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`
-      const cellDateObj = new Date(year, month, day)
-      const isDisabled = cellDateObj < today
-      const isSelected = (type === 'start' ? eventDate : eventEndDate) === cellDateStr
-
-      if (isDisabled) {
-        cells.push(
-          <button
-            key={`day-${day}`}
-            type="button"
-            disabled={true}
-            className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-txt-muted/40 cursor-not-allowed"
-            title="Date is in the past"
-          >
-            {day}
-          </button>
-        )
-      } else {
-        cells.push(
-          <button
-            key={`day-${day}`}
-            type="button"
-            onClick={() => {
-              if (type === 'start') {
-                setEventDate(cellDateStr)
-              } else {
-                setEventEndDate(cellDateStr)
-              }
-              setOpenCalendar(null)
-            }}
-            className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold transition-colors hover:bg-sidebar-active ${
-              isSelected 
-                ? 'bg-txt-primary text-bg-base hover:opacity-90' 
-                : 'text-txt-secondary'
-            }`}
-          >
-            {day}
-          </button>
-        )
-      }
-    }
-
-    return cells
-  }
-
-  const handleDateInputChange = (val: string, setter: (v: string) => void) => {
-    let cleaned = val.replace(/[^0-9]/g, '')
-    if (cleaned.length > 8) {
-      cleaned = cleaned.slice(0, 8)
-    }
-    
-    let formatted = cleaned
-    if (cleaned.length > 2) {
-      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2)
-    }
-    if (cleaned.length > 4) {
-      formatted = formatted.slice(0, 5) + '/' + cleaned.slice(4)
-    }
-    
-    setter(formatted)
-  }
+  // (Date picker click-outside now handled inside MultiDatePicker component)
 
   // Keep paid amount synced if fully paid
   useEffect(() => {
@@ -273,8 +145,7 @@ export default function EnquiryDetailPage() {
           setName(found.name)
           setEmail(found.email)
           setPhone(found.phone)
-          setEventDate(dbDateToDisplayDate(found.event_date))
-          setEventEndDate(dbDateToDisplayDate(found.event_end_date || found.event_date))
+          setEventDates(parseEventDates((found as any).event_dates, found.event_date, found.event_end_date))
           setPackageName(found.package)
           setAgreedPrice(found.agreed_price !== null ? String(found.agreed_price) : '')
           setStatus(found.status)
@@ -315,8 +186,7 @@ export default function EnquiryDetailPage() {
           setName(data.name)
           setEmail(data.email)
           setPhone(data.phone)
-          setEventDate(dbDateToDisplayDate(data.event_date))
-          setEventEndDate(dbDateToDisplayDate(data.event_end_date || data.event_date))
+          setEventDates(parseEventDates(data.event_dates, data.event_date, data.event_end_date))
           setPackageName(data.package)
           setAgreedPrice(data.agreed_price !== null ? String(data.agreed_price) : '')
           setStatus(data.status)
@@ -367,6 +237,7 @@ export default function EnquiryDetailPage() {
     setSaving(true)
     setErrorMsg(null)
     setSuccessMsg(null)
+    setEventDatesError('')
 
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setErrorMsg('Please enter a valid email address (e.g. client@example.com).')
@@ -374,25 +245,17 @@ export default function EnquiryDetailPage() {
       return
     }
 
-    if (isInvalidDate(eventDate)) {
-      setErrorMsg('Please enter a valid Start Date in DD/MM/YYYY format.')
-      setSaving(false)
-      return
-    }
-    if (eventEndDate && isInvalidDate(eventEndDate)) {
-      setErrorMsg('Please enter a valid End Date in DD/MM/YYYY format.')
+    if (eventDates.length === 0) {
+      setEventDatesError('Please select at least one event date.')
+      setErrorMsg('Please select at least one event date.')
       setSaving(false)
       return
     }
 
-    const dbStart = displayDateToDbDate(eventDate)
-    const dbEnd = displayDateToDbDate(eventEndDate || eventDate)
-
-    if (dbEnd < dbStart) {
-      setErrorMsg('End Date cannot be before Start Date.')
-      setSaving(false)
-      return
-    }
+    const sorted = [...eventDates].sort()
+    const dbStart = sorted[0]
+    const dbEnd = sorted[sorted.length - 1]
+    const eventDatesStr = sorted.join(',')
 
     const today = new Date()
     const y = today.getFullYear()
@@ -401,6 +264,7 @@ export default function EnquiryDetailPage() {
     const todayStr = `${y}-${m}-${d}`
 
     if (dbStart < todayStr) {
+      setEventDatesError('Event date cannot be in the past.')
       setErrorMsg('Event date cannot be in the past.')
       setSaving(false)
       return
@@ -438,6 +302,7 @@ export default function EnquiryDetailPage() {
               phone,
               event_date: dbStart,
               event_end_date: dbEnd,
+              event_dates: eventDatesStr,
               package: packageName,
               agreed_price: numericPrice,
               status,
@@ -465,6 +330,7 @@ export default function EnquiryDetailPage() {
               title: `${bookingType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}: ${name}`,
               event_date: dbStart,
               event_end_date: dbEnd,
+              event_dates: eventDatesStr,
               event_type: bookingType as any,
               notes: `Package: ${packageName}. Price agreed: ${numericPrice ? '₹' + numericPrice : '—'}. Location: ${location || '—'}. ${notes ? 'Notes: ' + notes : ''}`,
             }
@@ -476,6 +342,7 @@ export default function EnquiryDetailPage() {
               title: `${bookingType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}: ${name}`,
               event_date: dbStart,
               event_end_date: dbEnd,
+              event_dates: eventDatesStr,
               event_type: bookingType as any,
               team_member: null,
               notes: `Package: ${packageName}. Price agreed: ${numericPrice ? '₹' + numericPrice : '—'}. Location: ${location || '—'}. ${notes ? 'Notes: ' + notes : ''}`,
@@ -514,6 +381,7 @@ export default function EnquiryDetailPage() {
               event_type: bookingType,
               event_date_start: dbStart,
               event_date_end: dbEnd || dbStart,
+              event_dates: eventDatesStr,
               location: location || '—',
               package: packageName,
               special_requirements: notes || '',
@@ -593,6 +461,7 @@ export default function EnquiryDetailPage() {
           phone,
           event_date: dbStart,
           event_end_date: dbEnd,
+          event_dates: eventDatesStr,
           package: packageName,
           agreed_price: numericPrice,
           status,
@@ -630,6 +499,7 @@ export default function EnquiryDetailPage() {
               title: `${bookingType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}: ${name}`,
               event_date: dbStart,
               event_end_date: dbEnd,
+              event_dates: eventDatesStr,
               event_type: bookingType,
               notes: `Package: ${packageName}. Price agreed: ${numericPrice ? '₹' + numericPrice : '—'}. Location: ${location || '—'}. ${notes ? 'Notes: ' + notes : ''}`,
             })
@@ -648,6 +518,7 @@ export default function EnquiryDetailPage() {
               title: `${bookingType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}: ${name}`,
               event_date: dbStart,
               event_end_date: dbEnd,
+              event_dates: eventDatesStr,
               event_type: bookingType,
               notes: `Package: ${packageName}. Price agreed: ${numericPrice ? '₹' + numericPrice : '—'}. Location: ${location || '—'}. ${notes ? 'Notes: ' + notes : ''}`,
             })
@@ -693,6 +564,7 @@ export default function EnquiryDetailPage() {
                 event_type: bookingType,
                 event_date_start: dbStart,
                 event_date_end: dbEnd || dbStart,
+                event_dates: eventDatesStr,
                 location: location || '—',
                 package: packageName,
                 agreed_price: finalPrice,
@@ -723,6 +595,7 @@ export default function EnquiryDetailPage() {
                 event_type: bookingType,
                 event_date_start: dbStart,
                 event_date_end: dbEnd || dbStart,
+                event_dates: eventDatesStr,
                 location: location || '—',
                 package: packageName,
                 agreed_price: finalPrice,
@@ -749,6 +622,7 @@ export default function EnquiryDetailPage() {
               phone,
               event_date: dbStart,
               event_end_date: dbEnd,
+              event_dates: eventDatesStr,
               package: packageName,
               agreed_price: numericPrice,
               status,
@@ -983,145 +857,15 @@ export default function EnquiryDetailPage() {
                 Event Details
               </h3>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
-                    Event Date (Start)
-                  </label>
-                  <div className="relative flex flex-col justify-start">
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        required
-                        placeholder="DD/MM/YYYY"
-                        value={eventDate}
-                        onChange={(e) => handleDateInputChange(e.target.value, setEventDate)}
-                        onFocus={() => {
-                          const parsed = parseDisplayDate(eventDate)
-                          setCalendarViewDate(parsed || new Date())
-                          setOpenCalendar('start')
-                        }}
-                        className="block w-full rounded-lg border border-input-border bg-input-base pl-3 pr-10 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-medium"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCalendar('start')}
-                        className="start-date-toggle absolute right-2 text-txt-muted hover:text-txt-primary p-1 rounded hover:bg-sidebar-active transition-colors cursor-pointer"
-                        title="Select date"
-                      >
-                        <CalendarIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* Custom Calendar Popup */}
-                    {openCalendar === 'start' && (
-                      <div 
-                        ref={startCalendarRef}
-                        className="absolute left-0 top-full mt-1 z-[9999] bg-modal-base border border-border-base rounded-xl shadow-lg p-3 w-64 text-sm text-txt-primary select-none animate-fadeIn"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                          <span className="font-bold">
-                            {calendarViewDate.toLocaleString('default', { month: 'long' })} {calendarViewDate.getFullYear()}
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-txt-muted mb-1">
-                          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                          {renderDaysGrid('start')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
-                    Event Date (End)
-                  </label>
-                  <div className="relative flex flex-col justify-start">
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        required
-                        placeholder="DD/MM/YYYY"
-                        value={eventEndDate}
-                        onChange={(e) => handleDateInputChange(e.target.value, setEventEndDate)}
-                        onFocus={() => {
-                          const parsed = parseDisplayDate(eventEndDate)
-                          setCalendarViewDate(parsed || new Date())
-                          setOpenCalendar('end')
-                        }}
-                        className="block w-full rounded-lg border border-input-border bg-input-base pl-3 pr-10 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-medium"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCalendar('end')}
-                        className="end-date-toggle absolute right-2 text-txt-muted hover:text-txt-primary p-1 rounded hover:bg-sidebar-active transition-colors cursor-pointer"
-                        title="Select date"
-                      >
-                        <CalendarIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* Custom Calendar Popup */}
-                    {openCalendar === 'end' && (
-                      <div 
-                        ref={endCalendarRef}
-                        className="absolute left-0 top-full mt-1 z-[9999] bg-modal-base border border-border-base rounded-xl shadow-lg p-3 w-64 text-sm text-txt-primary select-none animate-fadeIn"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                          <span className="font-bold">
-                            {calendarViewDate.toLocaleString('default', { month: 'long' })} {calendarViewDate.getFullYear()}
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))
-                            }}
-                            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-sidebar-active rounded transition-colors cursor-pointer"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-txt-muted mb-1">
-                          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                        </div>
-
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                          {renderDaysGrid('end')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                <div className="col-span-1 sm:col-span-2">
+                  <MultiDatePicker
+                    label="Event Date(s)"
+                    selectedDates={eventDates}
+                    onChange={setEventDates}
+                    placeholder="Select event date(s)"
+                    error={eventDatesError}
+                    allowPast={true}
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
