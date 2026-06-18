@@ -54,12 +54,12 @@ export async function generateUniqueReceiptNumber(
 
   // Generate the next sequential number, starting from maxNum + 1
   let nextNum = maxNum + 1;
-  let receiptNumber = `RMF-${year}-${String(nextNum).padStart(4, '0')}`;
+  let receiptNumber = `RMF-${year}-${nextNum}`;
 
   // Ensure absolute uniqueness by incrementing nextNum if it already exists in the set
   while (existingNumbers.has(receiptNumber.toUpperCase())) {
     nextNum++;
-    receiptNumber = `RMF-${year}-${String(nextNum).padStart(4, '0')}`;
+    receiptNumber = `RMF-${year}-${nextNum}`;
   }
 
   return receiptNumber;

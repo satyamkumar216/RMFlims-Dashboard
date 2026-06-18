@@ -96,6 +96,7 @@ export default function EnquiryDetailPage() {
   const [paymentMethod, setPaymentMethod] = useState<string>('')
   const [paymentTimeline, setPaymentTimeline] = useState<string>('custom')
   const [paidAmount, setPaidAmount] = useState<string>('')
+  const [enquirySeq, setEnquirySeq] = useState<number>(1)
 
   // Receipt Modal State
   const [showReceipt, setShowReceipt] = useState(false)
@@ -284,6 +285,15 @@ export default function EnquiryDetailPage() {
           const rawTimeline = found.payment_timeline || 'custom';
           setPaymentTimeline(rawTimeline === '100_advance' || rawTimeline === 'pay_on_delivery' ? rawTimeline : 'custom')
           setPaidAmount(found.paid_amount !== undefined && found.paid_amount !== null ? String(found.paid_amount) : '')
+          
+          // Calculate sequential number for demo mode
+          const demoEnquiries = getDemoEnquiries()
+          const enquiryYear = found.created_at ? new Date(found.created_at).getFullYear() : new Date().getFullYear()
+          const sameYear = demoEnquiries
+            .filter(e => new Date(e.created_at || new Date()).getFullYear() === enquiryYear)
+            .sort((a, b) => new Date(a.created_at || new Date()).getTime() - new Date(b.created_at || new Date()).getTime())
+          const idx = sameYear.findIndex(e => e.id === found.id)
+          setEnquirySeq(idx !== -1 ? idx + 1 : 1)
         } else {
           setErrorMsg('Enquiry not found.')
         }
@@ -317,6 +327,18 @@ export default function EnquiryDetailPage() {
           const rawTimeline = data.payment_timeline || 'custom';
           setPaymentTimeline(rawTimeline === '100_advance' || rawTimeline === 'pay_on_delivery' ? rawTimeline : 'custom')
           setPaidAmount(data.paid_amount !== undefined && data.paid_amount !== null ? String(data.paid_amount) : '')
+
+          // Calculate sequential number for Supabase mode
+          const enquiryYear = data.created_at ? new Date(data.created_at).getFullYear() : new Date().getFullYear()
+          const { count, error: countError } = await supabase
+            .from('enquiries')
+            .select('id', { count: 'exact', head: true })
+            .gte('created_at', `${enquiryYear}-01-01T00:00:00Z`)
+            .lt('created_at', data.created_at)
+
+          if (!countError) {
+            setEnquirySeq((count || 0) + 1)
+          }
         }
       } catch (err) {
         setErrorMsg('Failed to load enquiry detail.')
@@ -790,6 +812,9 @@ export default function EnquiryDetailPage() {
   const numericPrice = agreedPrice === '' ? null : parseFloat(agreedPrice)
   const paidVal = paidAmount === '' ? 0 : parseFloat(paidAmount)
   const dueVal = Math.max(0, (numericPrice || 0) - paidVal)
+  const totalVal = numericPrice || 0
+  const enquiryAdvancePct = totalVal > 0 ? (paidVal / totalVal) * 100 : 0
+  const enquiryBalancePct = Math.max(0, 100 - enquiryAdvancePct)
 
   return (
     <>
@@ -1305,7 +1330,9 @@ export default function EnquiryDetailPage() {
                 <div className="text-right">
                   <h3 className="text-xl font-bold text-txt-primary print:text-black uppercase">Receipt</h3>
                   <p className="text-xs text-txt-secondary dark:text-txt-muted print:text-gray-505 mt-0.5">
-                    No: <span className="font-semibold text-txt-primary print:text-black">INV-{enquiry.id.slice(0, 8).toUpperCase()}</span>
+                    No: <span className="font-semibold text-txt-primary print:text-black">
+                      RMF-{enquiry.created_at ? new Date(enquiry.created_at).getFullYear() : new Date().getFullYear()}-{enquirySeq}
+                    </span>
                   </p>
                   <p className="text-xs text-txt-secondary dark:text-txt-muted print:text-gray-505 mt-0.5">
                     Date: <span className="font-medium text-txt-primary print:text-black">{formatDateToDDMMYYYY(new Date())}</span>
@@ -1387,13 +1414,15 @@ export default function EnquiryDetailPage() {
                     <span className="font-medium text-txt-primary print:text-black">{formatPrice(numericPrice)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span>Amount Paid</span>
-                    <span className="font-medium text-txt-primary print:text-black">{formatPrice(paidVal)}</span>
+                    <span>Advance Received</span>
+                    <span className="font-medium text-txt-primary print:text-black">{formatPrice(paidVal)} ({enquiryAdvancePct.toFixed(1)}% of total)</span>
                   </div>
                   <hr className="border-border-base print:border-gray-250 opacity-40" />
                   <div className="flex justify-between font-bold text-base text-txt-primary print:text-black">
                     <span>Balance Due</span>
-                    <span className={dueVal > 0 ? "text-red-500" : "text-emerald-500"}>{formatPrice(dueVal)}</span>
+                    <span className={dueVal > 0 ? "text-red-500" : "text-emerald-500"}>
+                      {formatPrice(dueVal)} ({enquiryBalancePct.toFixed(1)}% remaining)
+                    </span>
                   </div>
                 </div>
               </div>
