@@ -907,7 +907,7 @@ export default function EnquiryDetailPage() {
                     Event Date(s)
                   </label>
                   <MultiDatePicker
-                    dates={eventDates}
+                    selectedDates={eventDates}
                     onChange={(newDates) => {
                       setEventDates(newDates)
                       setEventDatesError('')
