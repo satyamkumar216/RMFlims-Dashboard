@@ -862,25 +862,34 @@ export default function EnquiryDetailPage() {
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Name
                   </label>
-                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
-                    {name}
-                  </div>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold"
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Email
                   </label>
-                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
-                    {email}
-                  </div>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold"
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Phone
                   </label>
-                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
-                    {phone}
-                  </div>
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold"
+                  />
                 </div>
               </div>
             </div>
@@ -897,25 +906,36 @@ export default function EnquiryDetailPage() {
                   <label className="block text-xs font-bold text-txt-secondary mb-1.5 uppercase tracking-wider">
                     Event Date(s)
                   </label>
-                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
-                    {formatMultiDates(eventDates)}
-                  </div>
+                  <MultiDatePicker
+                    dates={eventDates}
+                    onChange={(newDates) => {
+                      setEventDates(newDates)
+                      setEventDatesError('')
+                    }}
+                    error={eventDatesError}
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Location (City)
                   </label>
-                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
-                    {location || '—'}
-                  </div>
+                  <input
+                    type="text"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold"
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Package Requested
                   </label>
-                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
-                    {packageName}
-                  </div>
+                  <input
+                    type="text"
+                    value={packageName}
+                    onChange={(e) => setPackageName(e.target.value)}
+                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold"
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
@@ -944,33 +964,58 @@ export default function EnquiryDetailPage() {
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Payment Status
                   </label>
-                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
-                    {paymentStatus === 'fully_paid' ? 'Fully Paid' : paymentStatus === 'advance_paid' ? 'Advance Done (Partially Paid)' : 'Due / Not Paid'}
-                  </div>
+                  <select
+                    value={paymentStatus}
+                    onChange={(e) => handlePaymentStatusChange(e.target.value as any)}
+                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold cursor-pointer"
+                  >
+                    <option value="due">Due / Not Paid</option>
+                    <option value="advance_paid">Advance Done (Partially Paid)</option>
+                    <option value="fully_paid">Fully Paid</option>
+                  </select>
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Amount Paid (INR)
                   </label>
-                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
-                    {paidAmount ? '₹' + Number(paidAmount).toLocaleString('en-IN') : '₹0'}
-                  </div>
+                  <input
+                    type="number"
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    disabled={paymentStatus === 'fully_paid'}
+                    className={`block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold ${paymentStatus === 'fully_paid' ? 'opacity-70 cursor-not-allowed bg-gray-50' : ''}`}
+                    placeholder="e.g. 5000"
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Payment Method
                   </label>
-                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
-                    {paymentMethod || 'Awaiting / None'}
-                  </div>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold cursor-pointer"
+                  >
+                    <option value="">Awaiting / None</option>
+                    <option value="UPI">UPI / GPay / PhonePe</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Bank Transfer">Bank Transfer (NEFT/IMPS)</option>
+                  </select>
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Payment Timeline / Terms
                   </label>
-                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
-                    {paymentTimeline === '100_advance' ? '100% Advance' : paymentTimeline === 'pay_on_delivery' ? 'Pay on Delivery' : 'Custom — see amounts below'}
-                  </div>
+                  <select
+                    value={paymentTimeline}
+                    onChange={(e) => setPaymentTimeline(e.target.value)}
+                    disabled={paymentStatus === 'fully_paid'}
+                    className={`block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold cursor-pointer ${paymentStatus === 'fully_paid' ? 'opacity-70 cursor-not-allowed bg-gray-50' : ''}`}
+                  >
+                    <option value="custom">Custom — see amounts below</option>
+                    <option value="100_advance">100% Advance</option>
+                    <option value="pay_on_delivery">Pay on Delivery</option>
+                  </select>
                 </div>
               </div>
             </div>
