@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/utils/supabase/client'
-import { isDemoMode, getDemoEnquiries, saveDemoEnquiries, getDemoEvents, saveDemoEvents, getDemoBookings, saveDemoBookings } from '@/utils/supabase/demo'
+import { isDemoMode, getDemoEnquiries, saveDemoEnquiries, getDemoEvents, saveDemoEvents, getDemoBookings, saveDemoBookings, insertLedgerEntry } from '@/utils/supabase/demo'
 import { generateUniqueReceiptNumber } from '@/utils/invoice'
 import { MultiDatePicker, parseEventDates, formatMultiDates } from '@/components/MultiDatePicker'
 import { ArrowLeft, Save, ShieldAlert, CheckCircle2, Loader2, Printer, X, FileText } from 'lucide-react'
@@ -76,6 +76,14 @@ export default function EnquiryDetailPage() {
   const [saving, setSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
+  // Redirect staff from this page
+  useEffect(() => {
+    const staffSessionStr = localStorage.getItem('staff_session')
+    if (staffSessionStr) {
+      router.push('/dashboard/calendar')
+    }
+  }, [router])
 
 
   // Form states
@@ -373,6 +381,9 @@ export default function EnquiryDetailPage() {
             'Custom — see amounts below';
 
           if (existingBookingIdx !== -1) {
+            const oldAdvance = demoBookings[existingBookingIdx].advance_paid || 0;
+            const delta = finalAdvance - oldAdvance;
+
             demoBookings[existingBookingIdx] = {
               ...demoBookings[existingBookingIdx],
               client_name: name,
@@ -394,9 +405,20 @@ export default function EnquiryDetailPage() {
               booking_status: 'confirmed',
               admin_notes: notes || ''
             }
+
+            if (delta !== 0) {
+              const eventTitle = packageName || bookingType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+              await insertLedgerEntry(null, {
+                type: 'advance_received',
+                amount: delta,
+                reference_id: demoBookings[existingBookingIdx].id,
+                description: `Advance from ${name} — ${eventTitle}`
+              });
+            }
           } else {
+            const newBookingId = 'booking-' + Date.now();
             demoBookings.push({
-              id: 'booking-' + Date.now(),
+              id: newBookingId,
               enquiry_id: id,
               calendar_event_id: eventId,
               source: 'enquiry',
@@ -420,6 +442,16 @@ export default function EnquiryDetailPage() {
               receipt_number: receiptNumber,
               created_at: new Date().toISOString()
             })
+
+            if (finalAdvance > 0) {
+              const eventTitle = packageName || bookingType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+              await insertLedgerEntry(null, {
+                type: 'advance_received',
+                amount: finalAdvance,
+                reference_id: newBookingId,
+                description: `Advance from ${name} — ${eventTitle}`
+              });
+            }
           }
           saveDemoBookings(demoBookings)
         }
@@ -546,7 +578,7 @@ export default function EnquiryDetailPage() {
 
           const { data: existingBooking } = await supabase
             .from('bookings')
-            .select('id')
+            .select('id, advance_paid')
             .eq('enquiry_id', id)
             .maybeSingle()
 
@@ -556,6 +588,9 @@ export default function EnquiryDetailPage() {
             'Custom — see amounts below';
 
           if (existingBooking) {
+            const oldAdvance = existingBooking.advance_paid || 0;
+            const delta = finalAdvance - oldAdvance;
+
             await supabase
               .from('bookings')
               .update({
@@ -579,11 +614,21 @@ export default function EnquiryDetailPage() {
                 special_requirements: notes || ''
               })
               .eq('enquiry_id', id)
+
+            if (delta !== 0) {
+              const eventTitle = packageName || bookingType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+              await insertLedgerEntry(supabase, {
+                type: 'advance_received',
+                amount: delta,
+                reference_id: existingBooking.id,
+                description: `Advance from ${name} — ${eventTitle}`
+              });
+            }
           } else {
             // Generate unique receipt number
             const rNumber = await generateUniqueReceiptNumber(supabase, false)
 
-            await supabase
+            const { data: dbBooking, error: insertBError } = await supabase
               .from('bookings')
               .insert({
                 enquiry_id: id,
@@ -610,6 +655,20 @@ export default function EnquiryDetailPage() {
                 special_requirements: notes || '',
                 receipt_number: rNumber
               })
+              .select('id')
+              .single();
+
+            if (insertBError) throw insertBError;
+
+            if (finalAdvance > 0 && dbBooking?.id) {
+              const eventTitle = packageName || bookingType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+              await insertLedgerEntry(supabase, {
+                type: 'advance_received',
+                amount: finalAdvance,
+                reference_id: dbBooking.id,
+                description: `Advance from ${name} — ${eventTitle}`
+              });
+            }
           }
         }
       }
@@ -803,49 +862,25 @@ export default function EnquiryDetailPage() {
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Name
                   </label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-medium"
-                  />
+                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
+                    {name}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Email
                   </label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (errorMsg) setErrorMsg(null);
-                    }}
-                    onBlur={() => {
-                      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                        setErrorMsg('Please enter a valid email address (e.g. client@example.com).');
-                      }
-                    }}
-                    className={`block w-full rounded-lg border px-3 py-2 text-sm text-txt-primary focus:outline-hidden focus:ring-1 transition-all font-medium ${
-                      errorMsg && errorMsg.includes('email')
-                        ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
-                        : 'border-input-border focus:border-txt-primary focus:ring-txt-primary'
-                    }`}
-                  />
+                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
+                    {email}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Phone
                   </label>
-                  <input
-                    type="text"
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-medium"
-                  />
+                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
+                    {phone}
+                  </div>
                 </div>
               </div>
             </div>
@@ -859,38 +894,28 @@ export default function EnquiryDetailPage() {
               </h3>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
                 <div className="col-span-1 sm:col-span-2">
-                  <MultiDatePicker
-                    label="Event Date(s)"
-                    selectedDates={eventDates}
-                    onChange={setEventDates}
-                    placeholder="Select event date(s)"
-                    error={eventDatesError}
-                    allowPast={true}
-                  />
+                  <label className="block text-xs font-bold text-txt-secondary mb-1.5 uppercase tracking-wider">
+                    Event Date(s)
+                  </label>
+                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
+                    {formatMultiDates(eventDates)}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Location (City)
                   </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Udaipur, Goa, Delhi"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-medium"
-                  />
+                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
+                    {location || '—'}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Package Requested
                   </label>
-                  <input
-                    type="text"
-                    required
-                    value={packageName}
-                    onChange={(e) => setPackageName(e.target.value)}
-                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-medium"
-                  />
+                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
+                    {packageName}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
@@ -901,7 +926,7 @@ export default function EnquiryDetailPage() {
                     placeholder="Enter price or leave empty"
                     value={agreedPrice}
                     onChange={(e) => setAgreedPrice(e.target.value)}
-                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-medium"
+                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold"
                   />
                 </div>
               </div>
@@ -919,59 +944,33 @@ export default function EnquiryDetailPage() {
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Payment Status
                   </label>
-                  <select
-                    value={paymentStatus}
-                    onChange={(e) => handlePaymentStatusChange(e.target.value as any)}
-                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold cursor-pointer"
-                  >
-                    <option value="due">Due / Not Paid</option>
-                    <option value="advance_paid">Advance Done (Partially Paid)</option>
-                    <option value="fully_paid">Fully Paid</option>
-                  </select>
+                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
+                    {paymentStatus === 'fully_paid' ? 'Fully Paid' : paymentStatus === 'advance_paid' ? 'Advance Done (Partially Paid)' : 'Due / Not Paid'}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Amount Paid (INR)
                   </label>
-                  <input
-                    type="number"
-                    disabled={paymentStatus === 'due'}
-                    placeholder={paymentStatus === 'due' ? '0' : 'Enter paid amount'}
-                    value={paidAmount}
-                    onChange={(e) => setPaidAmount(e.target.value)}
-                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                  />
+                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
+                    {paidAmount ? '₹' + Number(paidAmount).toLocaleString('en-IN') : '₹0'}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Payment Method
                   </label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold cursor-pointer"
-                  >
-                    <option value="" disabled={paymentStatus === 'fully_paid'}>Awaiting / None</option>
-                    <option value="UPI">UPI (GPay/PhonePe)</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Bank Transfer">Bank Transfer (NEFT/IMPS)</option>
-                    <option value="Card">Credit/Debit Card</option>
-                    <option value="Other">Other</option>
-                  </select>
+                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
+                    {paymentMethod || 'Awaiting / None'}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Payment Timeline / Terms
                   </label>
-                  <select
-                    value={paymentTimeline}
-                    onChange={(e) => setPaymentTimeline(e.target.value)}
-                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-semibold cursor-pointer"
-                  >
-                    <option value="custom">Custom — see amounts below</option>
-                    <option value="100_advance">100% Advance</option>
-                    <option value="pay_on_delivery">Pay on Delivery</option>
-                  </select>
+                  <div className="w-full rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-semibold transition-all">
+                    {paymentTimeline === '100_advance' ? '100% Advance' : paymentTimeline === 'pay_on_delivery' ? 'Pay on Delivery' : 'Custom — see amounts below'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1026,13 +1025,9 @@ export default function EnquiryDetailPage() {
                   <label className="block text-xs font-bold text-txt-secondary mb-1 uppercase tracking-wider">
                     Admin Notes
                   </label>
-                  <textarea
-                    rows={4}
-                    placeholder="Internal notes about pricing, meetings, package customizations..."
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary placeholder-txt-muted focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-medium"
-                  />
+                  <div className="w-full min-h-[100px] rounded-lg border border-border-base/50 bg-sidebar-active/10 px-3.5 py-2.5 text-sm text-txt-primary font-medium whitespace-pre-wrap leading-relaxed">
+                    {notes || 'No notes added.'}
+                  </div>
                 </div>
               </div>
             </div>

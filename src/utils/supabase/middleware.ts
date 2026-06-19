@@ -18,19 +18,21 @@ export const updateSession = async (request: NextRequest) => {
   const isDashboardRoute = request.nextUrl.pathname.startsWith('/dashboard')
   const isLoginRoute = request.nextUrl.pathname.startsWith('/login')
 
+  const hasStaffSession = request.cookies.get('staff_session')?.value !== undefined
+
   // DEMO MODE ROUTING BYPASS
   if (isDemoMode) {
     const hasDemoSession = request.cookies.get('demo_session')?.value === 'true'
 
-    if (isDashboardRoute && !hasDemoSession) {
+    if (isDashboardRoute && !hasDemoSession && !hasStaffSession) {
       const url = request.nextUrl.clone()
       url.pathname = '/login'
       return NextResponse.redirect(url)
     }
 
-    if (isLoginRoute && hasDemoSession) {
+    if (isLoginRoute && (hasDemoSession || hasStaffSession)) {
       const url = request.nextUrl.clone()
-      url.pathname = '/dashboard'
+      url.pathname = hasStaffSession ? '/dashboard/calendar' : '/dashboard'
       return NextResponse.redirect(url)
     }
 
@@ -69,15 +71,15 @@ export const updateSession = async (request: NextRequest) => {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (isDashboardRoute && !user) {
+  if (isDashboardRoute && !user && !hasStaffSession) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  if (isLoginRoute && user) {
+  if (isLoginRoute && (user || hasStaffSession)) {
     const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
+    url.pathname = hasStaffSession ? '/dashboard/calendar' : '/dashboard'
     return NextResponse.redirect(url)
   }
 

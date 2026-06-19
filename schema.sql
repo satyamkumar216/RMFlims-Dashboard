@@ -88,3 +88,69 @@ CREATE POLICY "Allow full access for authenticated users" ON calendar_events FOR
 
 -- Policies for BOOKINGS
 CREATE POLICY "Allow full access for authenticated users" ON bookings FOR ALL USING (true) WITH CHECK (true);
+
+-- 4. STAFF MEMBERS TABLE
+CREATE TABLE IF NOT EXISTS staff_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  role_title TEXT NOT NULL,
+  password TEXT DEFAULT '1234',
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 5. SALARY REQUESTS TABLE
+CREATE TABLE IF NOT EXISTS salary_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  staff_id UUID NOT NULL REFERENCES staff_members(id) ON DELETE CASCADE,
+  request_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'paid')) DEFAULT 'pending',
+  amount_given NUMERIC,
+  paid_at TIMESTAMPTZ,
+  admin_note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 6. WORK LOG TABLE
+CREATE TABLE IF NOT EXISTS work_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  staff_id UUID NOT NULL REFERENCES staff_members(id) ON DELETE CASCADE,
+  event_id UUID REFERENCES calendar_events(id) ON DELETE SET NULL,
+  event_title TEXT NOT NULL,
+  event_date DATE NOT NULL,
+  note TEXT,
+  status TEXT NOT NULL CHECK (status IN ('logged', 'requested', 'paid')) DEFAULT 'logged',
+  salary_request_id UUID REFERENCES salary_requests(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 7. AGENCY CASH LEDGER TABLE
+CREATE TABLE IF NOT EXISTS agency_cash_ledger (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type TEXT NOT NULL CHECK (type IN ('advance_received', 'salary_paid', 'expense', 'other_income')),
+  amount NUMERIC NOT NULL,
+  reference_id UUID,
+  description TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE staff_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE salary_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE work_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agency_cash_ledger ENABLE ROW LEVEL SECURITY;
+
+-- Drop policies if they exist to avoid duplication errors
+DROP POLICY IF EXISTS "Allow full access for authenticated users" ON staff_members;
+DROP POLICY IF EXISTS "Allow full access for authenticated users" ON salary_requests;
+DROP POLICY IF EXISTS "Allow full access for authenticated users" ON work_log;
+DROP POLICY IF EXISTS "Allow full access for authenticated users" ON agency_cash_ledger;
+
+-- Policies
+CREATE POLICY "Allow full access for authenticated users" ON staff_members FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow full access for authenticated users" ON salary_requests FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow full access for authenticated users" ON work_log FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow full access for authenticated users" ON agency_cash_ledger FOR ALL USING (true) WITH CHECK (true);
+

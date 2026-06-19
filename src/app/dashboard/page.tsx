@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { isDemoMode, getDemoEnquiries, getDemoBookings, getDemoEvents } from '@/utils/supabase/demo'
+import { isDemoMode, getDemoEnquiries, getDemoBookings, getDemoEvents, getCashInHand } from '@/utils/supabase/demo'
 import { Search, SlidersHorizontal, Calendar as CalendarIcon, ArrowUpDown, Inbox, CheckCircle2, IndianRupee, TrendingUp, TrendingDown, Plus } from 'lucide-react'
 
 interface Enquiry {
@@ -28,6 +28,7 @@ export default function EnquiriesPage() {
   const [enquiries, setEnquiries] = useState<Enquiry[]>([])
   const [bookings, setBookings] = useState<any[]>([])
   const [events, setEvents] = useState<any[]>([])
+  const [cashInHand, setCashInHand] = useState<number>(0)
   
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -47,6 +48,7 @@ export default function EnquiriesPage() {
         const demoEnquiries = getDemoEnquiries() as Enquiry[]
         const demoBookings = getDemoBookings()
         const demoEvents = getDemoEvents()
+        const cash = await getCashInHand()
         
         // Sorting logic for enquiries
         const sorted = [...demoEnquiries].sort((a, b) => {
@@ -63,15 +65,17 @@ export default function EnquiriesPage() {
         setEnquiries(sorted)
         setBookings(demoBookings)
         setEvents(demoEvents)
+        setCashInHand(cash)
         setLoading(false)
         return
       }
 
       try {
-        const [enqRes, bookRes, evtRes] = await Promise.all([
+        const [enqRes, bookRes, evtRes, cash] = await Promise.all([
           supabase.from('enquiries').select('*').order(sortBy, { ascending: sortOrder === 'asc' }),
           supabase.from('bookings').select('*'),
-          supabase.from('calendar_events').select('*')
+          supabase.from('calendar_events').select('*'),
+          getCashInHand(supabase)
         ])
 
         if (enqRes.error) {
@@ -82,6 +86,7 @@ export default function EnquiriesPage() {
 
         if (!bookRes.error) setBookings(bookRes.data || [])
         if (!evtRes.error) setEvents(evtRes.data || [])
+        setCashInHand(cash)
       } catch (err: any) {
         setErrorMsg('Failed to load dashboard data.')
       } finally {
@@ -186,8 +191,8 @@ export default function EnquiriesPage() {
       {loading ? (
         <div className="space-y-6 animate-pulse">
           {/* Stat Cards Shimmer */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="p-6 bg-white dark:bg-card-base rounded-[16px] shadow-sm h-36 flex flex-col justify-between border border-transparent">
                 <div className="flex justify-between items-start">
                   <div className="h-3.5 bg-gray-200 dark:bg-gray-800 rounded w-24"></div>
@@ -225,7 +230,7 @@ export default function EnquiriesPage() {
       ) : (
         <>
           {/* Stat Cards Overview Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             {/* Total Enquiries Card */}
             <div className="p-6 bg-white dark:bg-card-base rounded-[16px] shadow-[0_2px_8px_rgba(0,0,0,0.06),0_0_1px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.08),0_0_1px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 transition-all duration-150 flex flex-col justify-between h-36 border border-transparent transition-colors">
               <div className="flex justify-between items-start">
@@ -295,6 +300,32 @@ export default function EnquiriesPage() {
                 <div className="mb-1 text-purple-500 dark:text-purple-400">
                   <svg className="w-16 h-8" viewBox="0 0 60 20" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M 2 18 Q 12 10, 22 15 T 42 4 T 58 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Cash In Hand Card */}
+            <div className="p-6 bg-white dark:bg-card-base rounded-[16px] shadow-[0_2px_8px_rgba(0,0,0,0.06),0_0_1px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.08),0_0_1px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 transition-all duration-150 flex flex-col justify-between h-36 border border-transparent transition-colors">
+              <div className="flex justify-between items-start">
+                <span className="text-[13px] font-medium text-txt-secondary">Cash In Hand</span>
+                <div className="p-2.5 rounded-full bg-[#EFF6FF] text-[#1D4ED8] dark:bg-indigo-500/10 dark:text-indigo-400">
+                  <IndianRupee className="h-4.5 w-4.5" />
+                </div>
+              </div>
+              <div className="flex items-end justify-between">
+                <div>
+                  <h3 className="text-[26px] font-extrabold text-txt-primary leading-none">
+                    ₹{cashInHand.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                  </h3>
+                  <div className="flex items-center gap-1 text-[12px] text-[#16A34A] font-medium mt-2">
+                    <TrendingUp className="h-3 w-3" />
+                    <span>Ledger balance</span>
+                  </div>
+                </div>
+                <div className="mb-1 text-[#1D4ED8] dark:text-indigo-400">
+                  <svg className="w-16 h-8" viewBox="0 0 60 20" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M 2 10 Q 12 4, 22 14 T 42 12 T 58 6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </div>
               </div>

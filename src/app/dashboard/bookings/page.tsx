@@ -8,7 +8,8 @@ import {
   getDemoBookings, 
   saveDemoBookings, 
   getDemoEvents, 
-  saveDemoEvents 
+  saveDemoEvents,
+  insertLedgerEntry
 } from '@/utils/supabase/demo'
 import { generateUniqueReceiptNumber } from '@/utils/invoice'
 import { MultiDatePicker, parseEventDates, formatMultiDates } from '@/components/MultiDatePicker'
@@ -87,6 +88,9 @@ const isInvalidDate = (displayDate: string): boolean => {
 export default function BookingsPage() {
   const supabase = createClient()
   
+  // Role & Session State
+  const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
+
   // Navigation & Tabs state
   const [activeTab, setActiveTab] = useState<'list' | 'add'>('list')
   
@@ -208,6 +212,16 @@ export default function BookingsPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchBookings()
+    const staffSessionStr = localStorage.getItem('staff_session')
+    if (staffSessionStr) {
+      setUserRole('staff')
+    } else {
+      setUserRole('admin')
+    }
+  }, [])
 
   const formatPrice = (val: any) => {
     const num = Number(val || 0)
@@ -361,6 +375,17 @@ export default function BookingsPage() {
       if (index !== -1) {
         demo[index] = updatedBooking
         saveDemoBookings(demo)
+
+        const delta = advanceNum - (editingBooking.advance_paid || 0);
+        if (delta !== 0) {
+          const eventTitle = updatedBooking.package || updatedBooking.event_type.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+          await insertLedgerEntry(null, {
+            type: 'advance_received',
+            amount: delta,
+            reference_id: editingBooking.id,
+            description: `Advance from ${updatedBooking.client_name} — ${eventTitle}`
+          });
+        }
       }
 
       // Also update calendar event
@@ -413,6 +438,17 @@ export default function BookingsPage() {
         .eq('id', editingBooking.id)
 
       if (bError) throw bError
+
+      const delta = advanceNum - (editingBooking.advance_paid || 0);
+      if (delta !== 0) {
+        const eventTitle = editPackage || editingBooking.event_type.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+        await insertLedgerEntry(supabase, {
+          type: 'advance_received',
+          amount: delta,
+          reference_id: editingBooking.id,
+          description: `Advance from ${editClientName} — ${eventTitle}`
+        });
+      }
 
       // 2. Save calendar event in Supabase
       if (editingBooking.calendar_event_id) {
@@ -611,6 +647,16 @@ export default function BookingsPage() {
       const demoE = getDemoEvents();
       saveDemoEvents([...demoE, newCalendarEvent]);
 
+      if (advanceNum > 0) {
+        const eventTitle = newBookingObj.package || newBookingObj.event_type.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+        await insertLedgerEntry(null, {
+          type: 'advance_received',
+          amount: advanceNum,
+          reference_id: tempBookingId,
+          description: `Advance from ${newBookingObj.client_name} — ${eventTitle}`
+        });
+      }
+
       setFormSaving(false);
       clearAddForm();
       fetchBookings();
@@ -636,7 +682,7 @@ export default function BookingsPage() {
       if (eError) throw eError;
 
       // 2. Insert Booking referencing the actual DB Calendar Event ID
-      const { error: bError } = await supabase
+      const { data: dbBooking, error: bError } = await supabase
         .from('bookings')
         .insert({
           calendar_event_id: dbEvent?.id,
@@ -665,9 +711,23 @@ export default function BookingsPage() {
           booking_status: addBookingStatus,
           admin_notes: addAdminNotes || null,
           receipt_number: receiptNum
-        });
+        })
+        .select('id')
+        .single();
 
       if (bError) throw bError;
+
+      if (advanceNum > 0 && dbBooking?.id) {
+        const resolvedPackage = addPackage === 'Custom' ? `Custom: ${addCustomPackageDetails}` : addPackage;
+        const eventTitle = resolvedPackage || addEventType.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+        await insertLedgerEntry(supabase, {
+          type: 'advance_received',
+          amount: advanceNum,
+          reference_id: dbBooking.id,
+          description: `Advance from ${addClientName} — ${eventTitle}`
+        });
+      }
+
       clearAddForm();
     } catch (e: any) {
       console.error(e);
@@ -759,28 +819,30 @@ export default function BookingsPage() {
         </div>
         
         {/* Toggle sub-tabs */}
-        <div className="bg-sidebar-active border border-border-base p-1 rounded-lg inline-flex self-start">
-          <button
-            onClick={() => setActiveTab('list')}
-            className={`px-4 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${
-              activeTab === 'list' 
-                ? 'bg-card-base text-txt-primary shadow-base' 
-                : 'text-txt-secondary hover:text-txt-primary'
-            }`}
-          >
-            All Bookings
-          </button>
-          <button
-            onClick={() => setActiveTab('add')}
-            className={`px-4 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${
-              activeTab === 'add' 
-                ? 'bg-card-base text-txt-primary shadow-base' 
-                : 'text-txt-secondary hover:text-txt-primary'
-            }`}
-          >
-            Add Booking
-          </button>
-        </div>
+        {userRole === 'admin' && (
+          <div className="bg-sidebar-active border border-border-base p-1 rounded-lg inline-flex self-start">
+            <button
+              onClick={() => setActiveTab('list')}
+              className={`px-4 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${
+                activeTab === 'list' 
+                  ? 'bg-card-base text-txt-primary shadow-base' 
+                  : 'text-txt-secondary hover:text-txt-primary'
+              }`}
+            >
+              All Bookings
+            </button>
+            <button
+              onClick={() => setActiveTab('add')}
+              className={`px-4 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all ${
+                activeTab === 'add' 
+                  ? 'bg-card-base text-txt-primary shadow-base' 
+                  : 'text-txt-secondary hover:text-txt-primary'
+              }`}
+            >
+              Add Booking
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Tab Views */}
@@ -810,8 +872,8 @@ export default function BookingsPage() {
               >
                 <option value="newest">Newest Added</option>
                 <option value="soonest">Event Date (Soonest)</option>
-                <option value="payment">Unpaid First</option>
-                <option value="amount">Highest Amount</option>
+                {userRole === 'admin' && <option value="payment">Unpaid First</option>}
+                {userRole === 'admin' && <option value="amount">Highest Amount</option>}
               </select>
             </div>
           </div>
@@ -841,27 +903,29 @@ export default function BookingsPage() {
               ))}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-txt-muted font-bold uppercase tracking-wider mr-2">Payment</span>
-              {[
-                { key: 'all', label: 'All Payments' },
-                { key: 'due', label: 'Due' },
-                { key: 'partial', label: 'Partial' },
-                { key: 'paid', label: 'Paid in Full' }
-              ].map(pill => (
-                <button
-                  key={pill.key}
-                  onClick={() => setPaymentFilter(pill.key)}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
-                    paymentFilter === pill.key
-                      ? 'bg-txt-primary text-bg-base border-txt-primary'
-                      : 'bg-card-base text-txt-secondary border-border-base hover:border-txt-muted'
-                  }`}
-                >
-                  {pill.label}
-                </button>
-              ))}
-            </div>
+            {userRole === 'admin' && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-txt-muted font-bold uppercase tracking-wider mr-2">Payment</span>
+                {[
+                  { key: 'all', label: 'All Payments' },
+                  { key: 'due', label: 'Due' },
+                  { key: 'partial', label: 'Partial' },
+                  { key: 'paid', label: 'Paid in Full' }
+                ].map(pill => (
+                  <button
+                    key={pill.key}
+                    onClick={() => setPaymentFilter(pill.key)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                      paymentFilter === pill.key
+                        ? 'bg-txt-primary text-bg-base border-txt-primary'
+                        : 'bg-card-base text-txt-secondary border-border-base hover:border-txt-muted'
+                    }`}
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* List items */}
@@ -960,21 +1024,25 @@ export default function BookingsPage() {
                       {/* Pricing and Action side */}
                       <div className="flex flex-col sm:flex-row md:flex-col items-start md:items-end justify-between w-full md:w-auto gap-4 border-t md:border-0 pt-4 md:pt-0 border-border-base">
                         <div className="space-y-1">
-                          <div className="text-sm font-semibold text-txt-primary">
-                            ₹{b.agreed_price.toLocaleString('en-IN')} agreed · <span className="text-txt-secondary">₹{b.advance_paid.toLocaleString('en-IN')} paid</span>
-                          </div>
-                          
-                          {/* Payment status badge */}
-                          <div className="flex items-center gap-2 md:justify-end">
-                            <span className="text-xs text-txt-muted font-bold">Payments</span>
-                            <span className={`text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-sm border ${
-                              b.payment_status === 'paid' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' :
-                              b.payment_status === 'partial' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
-                              'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
-                            }`}>
-                              {b.payment_status === 'paid' ? 'Paid in Full' : b.payment_status === 'partial' ? 'Partially Paid' : 'Due'}
-                            </span>
-                          </div>
+                          {userRole === 'admin' && (
+                            <>
+                              <div className="text-sm font-semibold text-txt-primary">
+                                ₹{b.agreed_price.toLocaleString('en-IN')} agreed · <span className="text-txt-secondary">₹{b.advance_paid.toLocaleString('en-IN')} paid</span>
+                              </div>
+                              
+                              {/* Payment status badge */}
+                              <div className="flex items-center gap-2 md:justify-end">
+                                <span className="text-xs text-txt-muted font-bold">Payments</span>
+                                <span className={`text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-sm border ${
+                                  b.payment_status === 'paid' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' :
+                                  b.payment_status === 'partial' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
+                                  'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                                }`}>
+                                  {b.payment_status === 'paid' ? 'Paid in Full' : b.payment_status === 'partial' ? 'Partially Paid' : 'Due'}
+                                </span>
+                              </div>
+                            </>
+                          )}
                           
                           {b.lead_photographer && (
                             <div className="text-[11px] text-txt-secondary font-medium md:text-right">
@@ -984,23 +1052,25 @@ export default function BookingsPage() {
                         </div>
 
                         {/* Buttons */}
-                        <div className="flex items-center gap-2 self-stretch md:self-auto">
-                          <button
-                            onClick={() => handleGenerateReceipt(b)}
-                            className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 border border-border-base hover:bg-sidebar-active hover:text-txt-primary font-semibold text-xs py-1.5 px-3 rounded-lg transition-colors cursor-pointer text-txt-secondary bg-card-base"
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                            <span>View receipt</span>
-                          </button>
-                          
-                          <button
-                            onClick={() => handleOpenEdit(b)}
-                            className="flex items-center justify-center border border-border-base hover:bg-sidebar-active hover:text-txt-primary p-2 rounded-lg transition-colors cursor-pointer text-txt-secondary bg-card-base"
-                            title="Edit Booking"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        {userRole === 'admin' && (
+                          <div className="flex items-center gap-2 self-stretch md:self-auto">
+                            <button
+                              onClick={() => handleGenerateReceipt(b)}
+                              className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 border border-border-base hover:bg-sidebar-active hover:text-txt-primary font-semibold text-xs py-1.5 px-3 rounded-lg transition-colors cursor-pointer text-txt-secondary bg-card-base"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              <span>View receipt</span>
+                            </button>
+                            
+                            <button
+                              onClick={() => handleOpenEdit(b)}
+                              className="flex items-center justify-center border border-border-base hover:bg-sidebar-active hover:text-txt-primary p-2 rounded-lg transition-colors cursor-pointer text-txt-secondary bg-card-base"
+                              title="Edit Booking"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

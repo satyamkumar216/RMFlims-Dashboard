@@ -1,3 +1,5 @@
+import { createClient } from './client'
+
 export interface DemoEnquiry {
   id: string
   name: string
@@ -253,3 +255,254 @@ export function saveDemoBookings(data: DemoBooking[]) {
   if (typeof window === 'undefined') return
   localStorage.setItem('demo_bookings', JSON.stringify(data))
 }
+
+// ----------------------------------------------------
+// NEW STAFF, PAYROLL & CASH LEDGER ENTITIES FOR DEMO
+// ----------------------------------------------------
+
+export interface DemoStaffMember {
+  id: string
+  full_name: string
+  email: string
+  phone: string
+  role_title: string
+  password?: string
+  active: boolean
+  created_at: string
+}
+
+export interface DemoSalaryRequest {
+  id: string
+  staff_id: string
+  request_date: string
+  status: 'pending' | 'paid'
+  amount_given: number | null
+  paid_at: string | null
+  admin_note: string | null
+  created_at: string
+}
+
+export interface DemoWorkLog {
+  id: string
+  staff_id: string
+  event_id: string | null
+  event_title: string
+  event_date: string
+  note: string | null
+  status: 'logged' | 'requested' | 'paid'
+  salary_request_id: string | null
+  created_at: string
+}
+
+export interface DemoLedgerEntry {
+  id: string
+  type: 'advance_received' | 'salary_paid' | 'expense' | 'other_income'
+  amount: number
+  reference_id: string | null
+  description: string
+  created_at: string
+}
+
+const defaultStaff: DemoStaffMember[] = [
+  {
+    id: 'staff-1',
+    full_name: 'Rohan Sen',
+    email: 'rohan@rmfilms.com',
+    phone: '+91 98765 11111',
+    role_title: 'Lead Photographer',
+    password: '1234',
+    active: true,
+    created_at: '2026-01-10T10:00:00Z'
+  },
+  {
+    id: 'staff-2',
+    full_name: 'Simran Roy',
+    email: 'simran@rmfilms.com',
+    phone: '+91 98765 22222',
+    role_title: 'Second Shooter',
+    password: '1234',
+    active: true,
+    created_at: '2026-01-15T10:00:00Z'
+  },
+  {
+    id: 'staff-3',
+    full_name: 'Amit Sharma',
+    email: 'amit@rmfilms.com',
+    phone: '+91 98765 33333',
+    role_title: 'Videographer',
+    password: '1234',
+    active: true,
+    created_at: '2026-02-01T10:00:00Z'
+  }
+]
+
+const defaultSalaryRequests: DemoSalaryRequest[] = [
+  {
+    id: 'salary-req-1',
+    staff_id: 'staff-1',
+    request_date: '2026-06-12T10:00:00Z',
+    status: 'paid',
+    amount_given: 5000,
+    paid_at: '2026-06-12T17:00:00Z',
+    admin_note: 'Paid via UPI',
+    created_at: '2026-06-12T10:00:00Z'
+  }
+]
+
+const defaultWorkLogs: DemoWorkLog[] = [
+  {
+    id: 'work-1',
+    staff_id: 'staff-1',
+    event_id: 'event-1',
+    event_title: 'Sarah & Neil Wedding Day',
+    event_date: '2026-06-22',
+    note: 'Lead photographer shift logged.',
+    status: 'paid',
+    salary_request_id: 'salary-req-1',
+    created_at: '2026-06-10T09:30:00Z'
+  }
+]
+
+const defaultLedger: DemoLedgerEntry[] = [
+  {
+    id: 'ledger-1',
+    type: 'advance_received',
+    amount: 80000,
+    reference_id: 'booking-1',
+    description: 'Advance from Sarah & Neil — Wedding Day Only',
+    created_at: '2026-06-10T09:15:00Z'
+  },
+  {
+    id: 'ledger-2',
+    type: 'expense',
+    amount: -1500,
+    reference_id: null,
+    description: 'Sensor cleaning for Sony A7IV',
+    created_at: '2026-06-13T10:00:00Z'
+  },
+  {
+    id: 'ledger-3',
+    type: 'salary_paid',
+    amount: -5000,
+    reference_id: 'salary-req-1',
+    description: 'Salary paid to Rohan Sen — May 2026 Shoots',
+    created_at: '2026-06-12T17:00:00Z'
+  }
+]
+
+export function getDemoStaff(): DemoStaffMember[] {
+  if (typeof window === 'undefined') return defaultStaff
+  const stored = localStorage.getItem('demo_staff')
+  if (!stored) {
+    localStorage.setItem('demo_staff', JSON.stringify(defaultStaff))
+    return defaultStaff
+  }
+  return JSON.parse(stored)
+}
+
+export function saveDemoStaff(data: DemoStaffMember[]) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('demo_staff', JSON.stringify(data))
+}
+
+export function getDemoSalaryRequests(): DemoSalaryRequest[] {
+  if (typeof window === 'undefined') return defaultSalaryRequests
+  const stored = localStorage.getItem('demo_salary_requests')
+  if (!stored) {
+    localStorage.setItem('demo_salary_requests', JSON.stringify(defaultSalaryRequests))
+    return defaultSalaryRequests
+  }
+  return JSON.parse(stored)
+}
+
+export function saveDemoSalaryRequests(data: DemoSalaryRequest[]) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('demo_salary_requests', JSON.stringify(data))
+}
+
+export function getDemoWorkLogs(): DemoWorkLog[] {
+  if (typeof window === 'undefined') return defaultWorkLogs
+  const stored = localStorage.getItem('demo_work_logs')
+  if (!stored) {
+    localStorage.setItem('demo_work_logs', JSON.stringify(defaultWorkLogs))
+    return defaultWorkLogs
+  }
+  return JSON.parse(stored)
+}
+
+export function saveDemoWorkLogs(data: DemoWorkLog[]) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('demo_work_logs', JSON.stringify(data))
+}
+
+export function getDemoLedger(): DemoLedgerEntry[] {
+  if (typeof window === 'undefined') return defaultLedger
+  const stored = localStorage.getItem('demo_ledger')
+  if (!stored) {
+    localStorage.setItem('demo_ledger', JSON.stringify(defaultLedger))
+    return defaultLedger
+  }
+  return JSON.parse(stored)
+}
+
+export function saveDemoLedger(data: DemoLedgerEntry[]) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('demo_ledger', JSON.stringify(data))
+}
+
+export async function getCashInHand(supabaseClient?: any): Promise<number> {
+  if (isDemoMode()) {
+    const ledger = getDemoLedger()
+    return ledger.reduce((sum, entry) => sum + (entry.amount || 0), 0)
+  }
+  
+  try {
+    const client = supabaseClient || createClient()
+    const { data, error } = await client
+      .from('agency_cash_ledger')
+      .select('amount')
+    
+    if (error) throw error
+    return (data || []).reduce((sum: number, entry: any) => sum + Number(entry.amount || 0), 0)
+  } catch (err) {
+    console.error('Failed to fetch cash in hand:', err)
+    return 0
+  }
+}
+
+export async function insertLedgerEntry(
+  supabaseClient: any,
+  entry: {
+    type: 'advance_received' | 'salary_paid' | 'expense' | 'other_income'
+    amount: number
+    reference_id: string | null
+    description: string
+  }
+) {
+  if (isDemoMode()) {
+    const ledger = getDemoLedger()
+    const newEntry: DemoLedgerEntry = {
+      id: 'ledger-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      ...entry,
+      created_at: new Date().toISOString()
+    }
+    ledger.push(newEntry)
+    saveDemoLedger(ledger)
+    return { data: newEntry, error: null }
+  }
+
+  const { data, error } = await supabaseClient
+    .from('agency_cash_ledger')
+    .insert({
+      type: entry.type,
+      amount: entry.amount,
+      reference_id: entry.reference_id,
+      description: entry.description
+    })
+    .select()
+    .single()
+
+  return { data, error }
+}
+
+

@@ -3,29 +3,63 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { isDemoMode } from '@/utils/supabase/demo'
-import { HelpCircle } from 'lucide-react'
+import { isDemoMode, getDemoStaff } from '@/utils/supabase/demo'
+import { HelpCircle, User, ShieldAlert, KeyRound, Lock } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  // Tab State
+  const [loginType, setLoginType] = useState<'admin' | 'staff'>('admin')
+
+  // Common State
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [isDemo, setIsDemo] = useState(false)
+
+  // Admin Credentials
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+
+  // Staff Credentials
+  const [staffList, setStaffList] = useState<any[]>([])
+  const [selectedStaffId, setSelectedStaffId] = useState('')
+  const [staffPin, setStaffPin] = useState('')
 
   useEffect(() => {
     setIsDemo(isDemoMode())
   }, [])
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // Load active staff members
+  useEffect(() => {
+    async function loadStaff() {
+      if (isDemoMode()) {
+        const list = getDemoStaff().filter(s => s.active)
+        setStaffList(list)
+        return
+      }
+      try {
+        const { data, error } = await supabase
+          .from('staff_members')
+          .select('id, full_name, password')
+          .eq('active', true)
+        if (!error && data) {
+          setStaffList(data)
+        }
+      } catch (e) {
+        console.error('Failed to load staff list:', e)
+      }
+    }
+    loadStaff()
+  }, [isDemo])
+
+  // Handle Admin Auth (Supabase Auth)
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setErrorMsg(null)
 
-    // Demo Mode Sign In Bypass
     if (isDemo) {
       setTimeout(() => {
         if (email.trim().toLowerCase() === 'admin@rmfilms.com' && password === 'admin123') {
@@ -36,7 +70,7 @@ export default function LoginPage() {
           setErrorMsg('Invalid credentials. For Demo Mode, please use: admin@rmfilms.com / admin123')
           setLoading(false)
         }
-      }, 500) // Small delay to feel realistic
+      }, 500)
       return
     }
 
@@ -59,88 +93,215 @@ export default function LoginPage() {
     }
   }
 
+  // Handle Staff Auth (Plain-text PIN match)
+  const handleStaffLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setErrorMsg(null)
+
+    if (!selectedStaffId) {
+      setErrorMsg('Please select your name.')
+      setLoading(false)
+      return
+    }
+    if (!staffPin.trim()) {
+      setErrorMsg('Please enter your password/PIN.')
+      setLoading(false)
+      return
+    }
+
+    const selectedStaff = staffList.find(s => s.id === selectedStaffId)
+    if (!selectedStaff) {
+      setErrorMsg('Staff profile not found.')
+      setLoading(false)
+      return
+    }
+
+    // Verify Password/PIN match
+    const isMatched = selectedStaff.password === staffPin.trim()
+
+    if (isMatched) {
+      // 1. Save local state session details
+      localStorage.setItem('staff_session', JSON.stringify({
+        id: selectedStaff.id,
+        name: selectedStaff.full_name
+      }))
+
+      // 2. Set helper cookie to satisfy Next middleware routing redirect rules
+      document.cookie = `staff_session=${selectedStaff.id}; path=/; max-age=86400`
+
+      // 3. Clear admin sessions if any
+      document.cookie = "demo_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+
+      router.refresh()
+      router.push('/dashboard/calendar') // Redirect staff to calendar
+    } else {
+      setErrorMsg('Invalid password/PIN. Please try again.')
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8 bg-white p-8 border border-gray-200 rounded-lg shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-bg-base text-txt-primary font-sans transition-colors duration-300">
+      <div className="w-full max-w-md space-y-8 bg-card-base p-8 border border-border-base rounded-2xl shadow-lg">
         <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-black">
+          <h1 className="text-[32px] font-black tracking-tight bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-500 dark:from-violet-400 dark:via-indigo-400 dark:to-cyan-400 bg-clip-text text-transparent">
             RM Films
           </h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Admin Dashboard Login
+          <p className="mt-2 text-xs text-txt-secondary uppercase tracking-widest font-bold">
+            Dashboard Portal Login
           </p>
         </div>
 
-        {isDemo && (
-          <div className="rounded-md bg-blue-50 p-4 border border-blue-200 text-sm text-blue-800 flex items-start gap-2.5">
+        {/* Tab Switcher */}
+        <div className="flex border border-border-base/80 rounded-xl p-0.5 bg-input-base">
+          <button
+            onClick={() => {
+              setLoginType('admin')
+              setErrorMsg(null)
+            }}
+            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              loginType === 'admin'
+                ? 'bg-card-base text-txt-primary shadow-xs border border-border-base/40'
+                : 'text-txt-secondary hover:text-txt-primary'
+            }`}
+          >
+            Admin Login
+          </button>
+          <button
+            onClick={() => {
+              setLoginType('staff')
+              setErrorMsg(null)
+            }}
+            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              loginType === 'staff'
+                ? 'bg-card-base text-txt-primary shadow-xs border border-border-base/40'
+                : 'text-txt-secondary hover:text-txt-primary'
+            }`}
+          >
+            Staff Login
+          </button>
+        </div>
+
+        {/* Info Banner */}
+        {loginType === 'admin' && isDemo && (
+          <div className="rounded-xl bg-blue-500/10 p-4 border border-blue-500/20 text-xs text-blue-600 dark:text-blue-400 flex items-start gap-2.5">
             <HelpCircle className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold block">Demo Mode Active</span>
-              You can log in and test everything immediately without Supabase. Use:
-              <div className="mt-1 font-mono text-xs">
-                Email: <span className="font-bold">admin@rmfilms.com</span><br />
-                Password: <span className="font-bold">admin123</span>
-              </div>
+              <span className="font-bold block mb-0.5">Demo Admin credentials</span>
+              Email: <span className="font-mono font-bold">admin@rmfilms.com</span><br />
+              Password: <span className="font-mono font-bold">admin123</span>
             </div>
           </div>
         )}
 
-        <form className="mt-6 space-y-6" onSubmit={handleLogin}>
-          {errorMsg && (
-            <div className="rounded-md bg-red-50 p-4 border border-red-200">
-              <div className="flex">
-                <div className="text-sm font-medium text-red-800">
-                  {errorMsg}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-4 rounded-md shadow-xs">
+        {loginType === 'staff' && (
+          <div className="rounded-xl bg-indigo-500/10 p-4 border border-indigo-500/20 text-xs text-indigo-600 dark:text-indigo-400 flex items-start gap-2.5">
+            <KeyRound className="h-5 w-5 text-indigo-500 shrink-0 mt-0.5" />
             <div>
-              <label htmlFor="email-address" className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address
-              </label>
-              <input
-                id="email-address"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-black focus:outline-none focus:ring-1 focus:ring-black sm:text-sm"
-                placeholder="admin@rmfilms.com"
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-black focus:outline-none focus:ring-1 focus:ring-black sm:text-sm"
-                placeholder="••••••••"
-              />
+              <span className="font-bold block mb-0.5">Staff Shared Auth</span>
+              Staff members use a simple shared dropdown + PIN password login (no email needed). Default PIN for mock staff: <span className="font-mono font-bold">1234</span>.
             </div>
           </div>
+        )}
 
-          <div>
+        {errorMsg && (
+          <div className="rounded-xl bg-red-500/10 p-4 border border-red-500/20 flex items-start gap-2.5 text-xs font-bold text-red-500">
+            <ShieldAlert className="h-4.5 w-4.5 shrink-0 mt-0.5" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {/* Form Container */}
+        {loginType === 'admin' ? (
+          /* ADMIN LOGIN FORM */
+          <form className="space-y-6" onSubmit={handleAdminLogin}>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="email-address" className="block text-xs font-bold uppercase tracking-wider text-txt-secondary mb-1.5">
+                  Admin Email
+                </label>
+                <input
+                  id="email-address"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary placeholder-txt-muted focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-medium"
+                  placeholder="admin@rmfilms.com"
+                />
+              </div>
+              <div>
+                <label htmlFor="password" className="block text-xs font-bold uppercase tracking-wider text-txt-secondary mb-1.5">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary placeholder-txt-muted focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-medium"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
-              className="group relative flex w-full justify-center rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              className="flex w-full justify-center rounded-xl bg-txt-primary px-4 py-2.5 text-sm font-bold text-white dark:bg-white dark:text-black hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer shadow-md"
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? 'Authenticating...' : 'Sign in as Admin'}
             </button>
-          </div>
-        </form>
+          </form>
+        ) : (
+          /* STAFF LOGIN FORM */
+          <form className="space-y-6" onSubmit={handleStaffLogin}>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="staff-name" className="block text-xs font-bold uppercase tracking-wider text-txt-secondary mb-1.5">
+                  Select Your Name
+                </label>
+                <select
+                  id="staff-name"
+                  required
+                  value={selectedStaffId}
+                  onChange={(e) => setSelectedStaffId(e.target.value)}
+                  className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-bold cursor-pointer"
+                >
+                  <option value="">-- Choose Member --</option>
+                  {staffList.map(s => (
+                    <option key={s.id} value={s.id}>{s.full_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="staff-pin" className="block text-xs font-bold uppercase tracking-wider text-txt-secondary mb-1.5">
+                  Password / PIN
+                </label>
+                <input
+                  id="staff-pin"
+                  type="password"
+                  required
+                  maxLength={6}
+                  placeholder="PIN PIN"
+                  value={staffPin}
+                  onChange={(e) => setStaffPin(e.target.value)}
+                  className="block w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-sm text-txt-primary placeholder-txt-muted focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary transition-all font-bold tracking-widest text-center"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex w-full justify-center rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-4 py-2.5 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer shadow-md"
+            >
+              {loading ? 'Checking PIN...' : 'Sign in as Staff'}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   )

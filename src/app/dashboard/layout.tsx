@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { isDemoMode } from '@/utils/supabase/demo'
-import { Inbox, Calendar, LogOut, Menu, X, Play, ClipboardList, Sun, Moon } from 'lucide-react'
+import { Inbox, Calendar, LogOut, Menu, X, Play, ClipboardList, Sun, Moon, Users, IndianRupee, CheckSquare } from 'lucide-react'
 
 export default function DashboardLayout({
   children,
@@ -16,6 +16,7 @@ export default function DashboardLayout({
   const router = useRouter()
   const supabase = createClient()
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isDemo, setIsDemo] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
@@ -37,8 +38,22 @@ export default function DashboardLayout({
   useEffect(() => {
     setIsDemo(isDemoMode())
     async function getUser() {
+      // Check if staff session exists in localStorage
+      const staffSessionStr = localStorage.getItem('staff_session')
+      if (staffSessionStr) {
+        try {
+          const session = JSON.parse(staffSessionStr)
+          setUserEmail(session.name)
+          setUserRole('staff')
+          return
+        } catch (e) {
+          console.error('Error parsing staff_session:', e)
+        }
+      }
+
       if (isDemoMode()) {
         setUserEmail('admin@rmfilms.com')
+        setUserRole('admin')
         return
       }
       const {
@@ -46,26 +61,53 @@ export default function DashboardLayout({
       } = await supabase.auth.getUser()
       if (user) {
         setUserEmail(user.email ?? null)
+        setUserRole('admin')
+      } else {
+        setUserRole('admin')
       }
     }
     getUser()
   }, [supabase])
 
+  // Redirect staff from admin-only routes
+  useEffect(() => {
+    if (userRole === 'staff') {
+      const restrictedPaths = ['/dashboard/ledger', '/dashboard/staff']
+      const isRestricted =
+        restrictedPaths.some((p) => pathname.startsWith(p)) ||
+        pathname === '/dashboard' ||
+        pathname.startsWith('/dashboard/enquiries')
+      
+      if (isRestricted) {
+        router.push('/dashboard/calendar')
+      }
+    }
+  }, [userRole, pathname, router])
+
   const handleLogout = async () => {
-    if (isDemoMode()) {
-      document.cookie = "demo_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
-    } else {
+    localStorage.removeItem('staff_session')
+    document.cookie = 'staff_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+    document.cookie = 'demo_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+    
+    if (!isDemoMode()) {
       await supabase.auth.signOut()
     }
     router.refresh()
     router.push('/login')
   }
 
-  const navItems = [
-    { name: 'Enquiries', href: '/dashboard', icon: Inbox },
-    { name: 'Bookings', href: '/dashboard/bookings', icon: ClipboardList },
-    { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
+  const allNavItems = [
+    { name: 'Enquiries', href: '/dashboard', icon: Inbox, roles: ['admin'] },
+    { name: 'Bookings', href: '/dashboard/bookings', icon: ClipboardList, roles: ['admin', 'staff'] },
+    { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar, roles: ['admin', 'staff'] },
+    { name: 'My Work Done', href: '/dashboard/my-work', icon: CheckSquare, roles: ['staff'] },
+    { name: 'Staff & Payroll', href: '/dashboard/staff', icon: Users, roles: ['admin'] },
+    { name: 'Cash Ledger', href: '/dashboard/ledger', icon: IndianRupee, roles: ['admin'] },
   ]
+
+  const navItems = allNavItems.filter((item) =>
+    userRole ? item.roles.includes(userRole) : item.roles.includes('admin')
+  )
 
   return (
     <div className="flex min-h-screen bg-bg-base text-txt-primary font-sans transition-colors duration-300">
