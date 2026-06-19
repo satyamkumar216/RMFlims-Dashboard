@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS enquiries (
   package TEXT NOT NULL,
   event_date DATE NOT NULL,
   event_end_date DATE,
+  event_dates TEXT,
   message TEXT NOT NULL,
   agreed_price NUMERIC,
   status TEXT NOT NULL CHECK (status IN ('new', 'in_progress', 'confirmed', 'cancelled')) DEFAULT 'new',
