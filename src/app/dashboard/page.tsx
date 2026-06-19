@@ -18,6 +18,7 @@ interface Enquiry {
   agreed_price: number | null
   status: 'new' | 'in_progress' | 'confirmed' | 'cancelled'
   location?: string | null
+  paid_amount?: number | null
   created_at: string
 }
 
@@ -442,6 +443,7 @@ export default function EnquiriesPage() {
                         <th className="px-6 py-3.5">Package</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Agreed Price</th>
+                        <th className="px-6 py-3.5 text-right">Advance Paid</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-cell-border text-sm text-txt-primary">
@@ -477,6 +479,9 @@ export default function EnquiriesPage() {
                           </td>
                           <td className="px-6 py-4 text-right font-bold text-txt-primary">
                             {formatPrice(enquiry.agreed_price)}
+                          </td>
+                          <td className="px-6 py-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                            {enquiry.paid_amount ? formatPrice(enquiry.paid_amount) : '—'}
                           </td>
                         </tr>
                       ))}
@@ -531,6 +536,12 @@ export default function EnquiriesPage() {
                           <span className="text-txt-muted block mb-0.5 uppercase tracking-widest text-[9px] font-bold">Agreed Price</span>
                           <span className="font-extrabold text-txt-primary text-sm">
                             {formatPrice(enquiry.agreed_price)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-txt-muted block mb-0.5 uppercase tracking-widest text-[9px] font-bold">Advance Paid</span>
+                          <span className="font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
+                            {enquiry.paid_amount ? formatPrice(enquiry.paid_amount) : '—'}
                           </span>
                         </div>
                       </div>
