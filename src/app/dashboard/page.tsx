@@ -171,6 +171,11 @@ export default function EnquiriesPage() {
   const upcomingEvents = events.filter(e => new Date(e.event_date) >= new Date()).length
 
   // Date and Greeting
+  const currentHour = new Date().getHours()
+  let greeting = 'Good evening'
+  if (currentHour < 12) greeting = 'Good morning'
+  else if (currentHour < 17) greeting = 'Good afternoon'
+
   const currentDateStr = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     day: 'numeric',
@@ -183,7 +188,7 @@ export default function EnquiriesPage() {
       {/* Page Header & Greeting */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <span className="text-sm font-semibold text-txt-muted">Good morning 👋</span>
+          <span className="text-sm font-semibold text-txt-muted">{greeting} 👋</span>
           <h1 className="text-[24px] font-bold tracking-tight text-txt-primary mt-0.5">{currentDateStr}</h1>
         </div>
       </div>
