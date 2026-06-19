@@ -9,7 +9,9 @@ import {
   saveDemoBookings, 
   getDemoEvents, 
   saveDemoEvents,
-  insertLedgerEntry
+  insertLedgerEntry,
+  getDemoWorkLogs,
+  saveDemoWorkLogs
 } from '@/utils/supabase/demo'
 import { generateUniqueReceiptNumber } from '@/utils/invoice'
 import { MultiDatePicker, parseEventDates, formatMultiDates } from '@/components/MultiDatePicker'
@@ -85,6 +87,22 @@ const isInvalidDate = (displayDate: string): boolean => {
   return dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d
 }
 
+const getDatesInRange = (startStr: string, endStr: string): string[] => {
+  if (!startStr) return []
+  if (!endStr || startStr === endStr) return [startStr]
+  
+  const dates: string[] = []
+  const start = new Date(startStr + 'T12:00:00')
+  const end = new Date(endStr + 'T12:00:00')
+  
+  const current = new Date(start)
+  while (current <= end) {
+    dates.push(current.toISOString().split('T')[0])
+    current.setDate(current.getDate() + 1)
+  }
+  return dates
+}
+
 export default function BookingsPage() {
   const supabase = createClient()
   
@@ -100,6 +118,15 @@ export default function BookingsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
+
+  // Staff Work Log State
+  const [workLogs, setWorkLogs] = useState<any[]>([])
+  const [staffSession, setStaffSession] = useState<any | null>(null)
+  const [activeLoggingBookingId, setActiveLoggingBookingId] = useState<string | null>(null)
+  const [logWorkDate, setLogWorkDate] = useState('')
+  const [logWorkNote, setLogWorkNote] = useState('')
+  const [editingWorkLogId, setEditingWorkLogId] = useState<string | null>(null)
+  const [editingWorkLogNote, setEditingWorkLogNote] = useState('')
 
   // Filters State
   const [typeFilter, setTypeFilter] = useState<string>('all')
@@ -213,11 +240,33 @@ export default function BookingsPage() {
     }
   }
 
+  const fetchWorkLogs = async () => {
+    if (isDemoMode()) {
+      setWorkLogs(getDemoWorkLogs())
+      return
+    }
+    try {
+      const { data, error } = await supabase.from('work_log').select('*')
+      if (!error && data) {
+        setWorkLogs(data)
+      }
+    } catch (e) {
+      console.error('Failed to fetch work logs', e)
+    }
+  }
+
   useEffect(() => {
     fetchBookings()
+    fetchWorkLogs()
     const staffSessionStr = localStorage.getItem('staff_session')
     if (staffSessionStr) {
-      setUserRole('staff')
+      try {
+        const session = JSON.parse(staffSessionStr)
+        setStaffSession(session)
+        setUserRole('staff')
+      } catch (e) {
+        console.error('Error parsing staff_session:', e)
+      }
     } else {
       setUserRole('admin')
     }
@@ -513,6 +562,114 @@ export default function BookingsPage() {
       console.error(e)
       setErrorMsg(`Failed to delete booking: ${e.message}`)
       fetchBookings()
+    }
+  }
+
+  // Work log handlers for staff logging
+  const handleConfirmWorkLog = async (booking: any, dateStr: string, noteStr: string) => {
+    if (!staffSession) return
+
+    const wlTitle = `${booking.client_name} — ${(booking.event_type || 'Shoot').replace('_', ' ')}`
+    
+    if (isDemoMode()) {
+      const demoLogs = getDemoWorkLogs()
+      const newLog = {
+        id: 'work-' + Date.now(),
+        staff_id: staffSession.id,
+        event_id: booking.calendar_event_id,
+        event_title: wlTitle,
+        event_date: dateStr,
+        note: noteStr.trim() || null,
+        status: 'pending' as const,
+        payment_id: null,
+        created_at: new Date().toISOString()
+      }
+      const updated = [newLog, ...demoLogs]
+      saveDemoWorkLogs(updated)
+      setWorkLogs(updated)
+      setSuccessMsg('Shift work logged successfully')
+      setTimeout(() => setSuccessMsg(''), 4000)
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('work_log')
+        .insert({
+          staff_id: staffSession.id,
+          event_id: booking.calendar_event_id,
+          event_title: wlTitle,
+          event_date: dateStr,
+          note: noteStr.trim() || null,
+          status: 'pending'
+        })
+        .select('*')
+        .single()
+      
+      if (error) throw error
+      if (data) {
+        setWorkLogs(prev => [data, ...prev])
+      }
+      setSuccessMsg('Shift work logged successfully')
+      setTimeout(() => setSuccessMsg(''), 4000)
+    } catch (e: any) {
+      alert('Failed to log work: ' + e.message)
+    }
+  }
+
+  const handleUpdateWorkLog = async (logId: string, noteStr: string) => {
+    if (isDemoMode()) {
+      const demoLogs = getDemoWorkLogs()
+      const updated = demoLogs.map(l => l.id === logId ? { ...l, note: noteStr.trim() || null } : l)
+      saveDemoWorkLogs(updated)
+      setWorkLogs(updated)
+      setSuccessMsg('Work log updated')
+      setTimeout(() => setSuccessMsg(''), 4000)
+      setEditingWorkLogId(null)
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('work_log')
+        .update({ note: noteStr.trim() || null })
+        .eq('id', logId)
+      
+      if (error) throw error
+      setWorkLogs(prev => prev.map(l => l.id === logId ? { ...l, note: noteStr.trim() || null } : l))
+      setSuccessMsg('Work log updated')
+      setTimeout(() => setSuccessMsg(''), 4000)
+      setEditingWorkLogId(null)
+    } catch (e: any) {
+      alert('Failed to update work log: ' + e.message)
+    }
+  }
+
+  const handleRemoveWorkLog = async (logId: string) => {
+    if (!confirm('Are you sure you want to remove this work log?')) return
+
+    if (isDemoMode()) {
+      const demoLogs = getDemoWorkLogs()
+      const updated = demoLogs.filter(l => l.id !== logId)
+      saveDemoWorkLogs(updated)
+      setWorkLogs(updated)
+      setSuccessMsg('Work log removed')
+      setTimeout(() => setSuccessMsg(''), 4000)
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('work_log')
+        .delete()
+        .eq('id', logId)
+      
+      if (error) throw error
+      setWorkLogs(prev => prev.filter(l => l.id !== logId))
+      setSuccessMsg('Work log removed')
+      setTimeout(() => setSuccessMsg(''), 4000)
+    } catch (e: any) {
+      alert('Failed to remove work log: ' + e.message)
     }
   }
 
@@ -1019,6 +1176,189 @@ export default function BookingsPage() {
                             <ArrowRight className="h-3 w-3" />
                           </Link>
                         )}
+
+                        {/* Staff Shift Payout Logging Section */}
+                        {userRole === 'staff' && staffSession && (() => {
+                          const activeDates = getDatesInRange(b.event_date_start, b.event_date_end)
+                          if (activeDates.length === 0) return null
+
+                          // Find logs already made for this staff member and this booking's event
+                          const eventId = b.calendar_event_id
+                          const bookingLogs = workLogs.filter(wl => 
+                            wl.staff_id === staffSession.id && 
+                            wl.event_id === eventId
+                          )
+
+                          // Dates that haven't been logged yet
+                          const unloggedDates = activeDates.filter(d => 
+                            !bookingLogs.some(wl => wl.event_date === d)
+                          )
+
+                          return (
+                            <div className="pt-3 border-t border-border-base/40 mt-3 space-y-2">
+                              {/* List of existing logs for this booking */}
+                              {bookingLogs.length > 0 && (
+                                <div className="space-y-1.5">
+                                  {bookingLogs.map(existingLog => (
+                                    <div key={existingLog.id} className="p-2.5 bg-emerald-500/5 border border-emerald-500/20 rounded-lg space-y-1.5 animate-fadeIn">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                          ✓ Logged work on {dbDateToDisplayDate(existingLog.event_date)}
+                                          {existingLog.status === 'paid' && (
+                                            <span className="ml-1.5 inline-flex items-center rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-450 border border-emerald-500/20 font-bold uppercase tracking-widest text-[8px] px-1 py-0.1">
+                                              PAID
+                                            </span>
+                                          )}
+                                        </span>
+                                        {existingLog.status !== 'paid' && editingWorkLogId !== existingLog.id && (
+                                          <div className="flex gap-2 text-[10px] font-bold">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEditingWorkLogId(existingLog.id)
+                                                setEditingWorkLogNote(existingLog.note || '')
+                                              }}
+                                              className="text-indigo-500 dark:text-indigo-400 hover:underline cursor-pointer"
+                                            >
+                                              Edit
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveWorkLog(existingLog.id)}
+                                              className="text-red-500 hover:underline cursor-pointer"
+                                            >
+                                              Remove
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {editingWorkLogId === existingLog.id ? (
+                                        <div className="space-y-1.5">
+                                          <input
+                                            type="text"
+                                            value={editingWorkLogNote}
+                                            onChange={(e) => setEditingWorkLogNote(e.target.value)}
+                                            placeholder="What did you do?"
+                                            className="w-full rounded-md border border-input-border bg-input-base px-2 py-1 text-[11px] text-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary"
+                                          />
+                                          <div className="flex gap-1.5 justify-end">
+                                            <button
+                                              type="button"
+                                              onClick={() => setEditingWorkLogId(null)}
+                                              className="px-2 py-0.5 text-[9px] text-txt-secondary hover:text-txt-primary cursor-pointer"
+                                            >
+                                              Cancel
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleUpdateWorkLog(existingLog.id, editingWorkLogNote)}
+                                              className="px-2 py-0.5 text-[9px] text-white bg-indigo-600 rounded font-bold cursor-pointer"
+                                            >
+                                              Save
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        existingLog.note && <div className="text-[11px] text-txt-secondary italic pl-2 border-l border-emerald-500/30">"{existingLog.note}"</div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Form to log work if there are unlogged dates */}
+                              {unloggedDates.length > 0 && (
+                                <div>
+                                  {activeLoggingBookingId === b.id ? (
+                                    <div className="bg-sidebar-active/20 border border-border-base rounded-lg p-2.5 space-y-2 animate-fadeIn">
+                                      <span className="text-[10px] font-extrabold text-txt-muted uppercase tracking-wider block">
+                                        Log work for {b.client_name || 'this shoot'}
+                                      </span>
+
+                                      {/* Date picker/dropdown if multi-date */}
+                                      {activeDates.length > 1 && (
+                                        <div className="space-y-1">
+                                          <label className="block text-[9px] font-bold text-txt-secondary uppercase tracking-wider">
+                                            Select Date
+                                          </label>
+                                          <select
+                                            value={logWorkDate}
+                                            onChange={(e) => setLogWorkDate(e.target.value)}
+                                            className="w-full rounded-md border border-input-border bg-input-base px-2 py-1 text-[11px] text-txt-primary focus:outline-hidden"
+                                          >
+                                            <option value="">-- Choose Date --</option>
+                                            {unloggedDates.map(d => (
+                                              <option key={d} value={d}>
+                                                {dbDateToDisplayDate(d)}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      )}
+
+                                      <div className="space-y-1">
+                                        <label className="block text-[9px] font-bold text-txt-secondary uppercase tracking-wider">
+                                          What did you do? (optional)
+                                        </label>
+                                        <input
+                                          type="text"
+                                          placeholder="e.g. 2nd shooter, edited the reel"
+                                          value={logWorkNote}
+                                          onChange={(e) => setLogWorkNote(e.target.value)}
+                                          className="w-full rounded-md border border-input-border bg-input-base px-2 py-1 text-[11px] text-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary"
+                                        />
+                                      </div>
+
+                                      <div className="flex gap-1.5 justify-end">
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveLoggingBookingId(null)}
+                                          className="px-2 py-0.5 text-[10px] text-txt-secondary hover:text-txt-primary cursor-pointer"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const finalDate = activeDates.length === 1 ? activeDates[0] : logWorkDate
+                                            if (!finalDate) {
+                                              alert('Please select a date')
+                                              return
+                                            }
+                                            handleConfirmWorkLog(b, finalDate, logWorkNote)
+                                            setActiveLoggingBookingId(null)
+                                          }}
+                                          className="px-3 py-0.5 bg-txt-primary text-bg-base rounded text-[10px] font-bold hover:opacity-90 cursor-pointer"
+                                        >
+                                          Confirm
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveLoggingBookingId(b.id)
+                                        setLogWorkNote('')
+                                        // Auto-select date if single-date
+                                        if (activeDates.length === 1) {
+                                          setLogWorkDate(activeDates[0])
+                                        } else {
+                                          setLogWorkDate('')
+                                        }
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-500 hover:text-indigo-400 hover:underline cursor-pointer"
+                                    >
+                                      <Plus className="h-3.5 w-3.5" />
+                                      <span>I worked on this</span>
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
 
                       {/* Pricing and Action side */}

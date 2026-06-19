@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { isDemoMode, getDemoStaff } from '@/utils/supabase/demo'
-import { HelpCircle, User, ShieldAlert, KeyRound, Lock } from 'lucide-react'
+import { HelpCircle, ShieldAlert, KeyRound } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -16,7 +16,7 @@ export default function LoginPage() {
   // Common State
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [isDemo, setIsDemo] = useState(false)
+  const isDemo = isDemoMode()
 
   // Admin Credentials
   const [email, setEmail] = useState('')
@@ -26,10 +26,6 @@ export default function LoginPage() {
   const [staffList, setStaffList] = useState<any[]>([])
   const [selectedStaffId, setSelectedStaffId] = useState('')
   const [staffPin, setStaffPin] = useState('')
-
-  useEffect(() => {
-    setIsDemo(isDemoMode())
-  }, [])
 
   // Load active staff members
   useEffect(() => {
@@ -52,7 +48,7 @@ export default function LoginPage() {
       }
     }
     loadStaff()
-  }, [isDemo])
+  }, [isDemo, supabase])
 
   // Handle Admin Auth (Supabase Auth)
   const handleAdminLogin = async (e: React.FormEvent) => {

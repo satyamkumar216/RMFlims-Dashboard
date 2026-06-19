@@ -101,16 +101,17 @@ CREATE TABLE IF NOT EXISTS staff_members (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 5. SALARY REQUESTS TABLE
-CREATE TABLE IF NOT EXISTS salary_requests (
+-- Drop old salary_requests table if it exists
+DROP TABLE IF EXISTS salary_requests CASCADE;
+
+-- 5. STAFF PAYMENTS TABLE (Replaces salary_requests)
+CREATE TABLE IF NOT EXISTS staff_payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   staff_id UUID NOT NULL REFERENCES staff_members(id) ON DELETE CASCADE,
-  request_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  status TEXT NOT NULL CHECK (status IN ('pending', 'paid')) DEFAULT 'pending',
-  amount_given NUMERIC,
-  paid_at TIMESTAMPTZ,
+  amount_given NUMERIC NOT NULL,
   admin_note TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  paid_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  entries_count INTEGER NOT NULL
 );
 
 -- 6. WORK LOG TABLE
@@ -121,8 +122,8 @@ CREATE TABLE IF NOT EXISTS work_log (
   event_title TEXT NOT NULL,
   event_date DATE NOT NULL,
   note TEXT,
-  status TEXT NOT NULL CHECK (status IN ('logged', 'requested', 'paid')) DEFAULT 'logged',
-  salary_request_id UUID REFERENCES salary_requests(id) ON DELETE SET NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'paid')) DEFAULT 'pending',
+  payment_id UUID REFERENCES staff_payments(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -138,19 +139,19 @@ CREATE TABLE IF NOT EXISTS agency_cash_ledger (
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE staff_members ENABLE ROW LEVEL SECURITY;
-ALTER TABLE salary_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE staff_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE work_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agency_cash_ledger ENABLE ROW LEVEL SECURITY;
 
 -- Drop policies if they exist to avoid duplication errors
 DROP POLICY IF EXISTS "Allow full access for authenticated users" ON staff_members;
-DROP POLICY IF EXISTS "Allow full access for authenticated users" ON salary_requests;
+DROP POLICY IF EXISTS "Allow full access for authenticated users" ON staff_payments;
 DROP POLICY IF EXISTS "Allow full access for authenticated users" ON work_log;
 DROP POLICY IF EXISTS "Allow full access for authenticated users" ON agency_cash_ledger;
 
 -- Policies
 CREATE POLICY "Allow full access for authenticated users" ON staff_members FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow full access for authenticated users" ON salary_requests FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow full access for authenticated users" ON staff_payments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow full access for authenticated users" ON work_log FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow full access for authenticated users" ON agency_cash_ledger FOR ALL USING (true) WITH CHECK (true);
 

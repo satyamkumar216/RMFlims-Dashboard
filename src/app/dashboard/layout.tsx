@@ -4,8 +4,8 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { isDemoMode } from '@/utils/supabase/demo'
-import { Inbox, Calendar, LogOut, Menu, X, Play, ClipboardList, Sun, Moon, Users, IndianRupee, CheckSquare } from 'lucide-react'
+import { isDemoMode, getDemoStaff } from '@/utils/supabase/demo'
+import { Inbox, Calendar, LogOut, Menu, X, Play, ClipboardList, Sun, Moon, Users, IndianRupee, CheckSquare, Coins, Settings } from 'lucide-react'
 
 export default function DashboardLayout({
   children,
@@ -43,6 +43,27 @@ export default function DashboardLayout({
       if (staffSessionStr) {
         try {
           const session = JSON.parse(staffSessionStr)
+          
+          // Verify if this staff member is still active
+          if (isDemoMode()) {
+            const list = getDemoStaff()
+            const found = list.find((s) => s.id === session.id)
+            if (!found || !found.active) {
+              handleLogout()
+              return
+            }
+          } else {
+            const { data, error } = await supabase
+              .from('staff_members')
+              .select('active')
+              .eq('id', session.id)
+              .single()
+            if (error || !data || !data.active) {
+              handleLogout()
+              return
+            }
+          }
+
           setUserEmail(session.name)
           setUserRole('staff')
           return
@@ -72,7 +93,7 @@ export default function DashboardLayout({
   // Redirect staff from admin-only routes
   useEffect(() => {
     if (userRole === 'staff') {
-      const restrictedPaths = ['/dashboard/ledger', '/dashboard/staff']
+      const restrictedPaths = ['/dashboard/ledger', '/dashboard/payroll', '/dashboard/settings']
       const isRestricted =
         restrictedPaths.some((p) => pathname.startsWith(p)) ||
         pathname === '/dashboard' ||
@@ -101,8 +122,9 @@ export default function DashboardLayout({
     { name: 'Bookings', href: '/dashboard/bookings', icon: ClipboardList, roles: ['admin', 'staff'] },
     { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar, roles: ['admin', 'staff'] },
     { name: 'My Work Done', href: '/dashboard/my-work', icon: CheckSquare, roles: ['staff'] },
-    { name: 'Staff & Payroll', href: '/dashboard/staff', icon: Users, roles: ['admin'] },
+    { name: 'Payroll', href: '/dashboard/payroll', icon: Coins, roles: ['admin'] },
     { name: 'Cash Ledger', href: '/dashboard/ledger', icon: IndianRupee, roles: ['admin'] },
+    { name: 'Settings', href: '/dashboard/settings', icon: Settings, roles: ['admin'] },
   ]
 
   const navItems = allNavItems.filter((item) =>

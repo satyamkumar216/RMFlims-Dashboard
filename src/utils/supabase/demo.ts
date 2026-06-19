@@ -271,15 +271,13 @@ export interface DemoStaffMember {
   created_at: string
 }
 
-export interface DemoSalaryRequest {
+export interface DemoStaffPayment {
   id: string
   staff_id: string
-  request_date: string
-  status: 'pending' | 'paid'
-  amount_given: number | null
-  paid_at: string | null
+  amount_given: number
   admin_note: string | null
-  created_at: string
+  paid_at: string
+  entries_count: number
 }
 
 export interface DemoWorkLog {
@@ -289,8 +287,8 @@ export interface DemoWorkLog {
   event_title: string
   event_date: string
   note: string | null
-  status: 'logged' | 'requested' | 'paid'
-  salary_request_id: string | null
+  status: 'pending' | 'paid'
+  payment_id: string | null
   created_at: string
 }
 
@@ -336,16 +334,14 @@ const defaultStaff: DemoStaffMember[] = [
   }
 ]
 
-const defaultSalaryRequests: DemoSalaryRequest[] = [
+const defaultStaffPayments: DemoStaffPayment[] = [
   {
-    id: 'salary-req-1',
+    id: 'payment-1',
     staff_id: 'staff-1',
-    request_date: '2026-06-12T10:00:00Z',
-    status: 'paid',
     amount_given: 5000,
-    paid_at: '2026-06-12T17:00:00Z',
     admin_note: 'Paid via UPI',
-    created_at: '2026-06-12T10:00:00Z'
+    paid_at: '2026-06-12T17:00:00Z',
+    entries_count: 1
   }
 ]
 
@@ -358,7 +354,7 @@ const defaultWorkLogs: DemoWorkLog[] = [
     event_date: '2026-06-22',
     note: 'Lead photographer shift logged.',
     status: 'paid',
-    salary_request_id: 'salary-req-1',
+    payment_id: 'payment-1',
     created_at: '2026-06-10T09:30:00Z'
   }
 ]
@@ -405,19 +401,19 @@ export function saveDemoStaff(data: DemoStaffMember[]) {
   localStorage.setItem('demo_staff', JSON.stringify(data))
 }
 
-export function getDemoSalaryRequests(): DemoSalaryRequest[] {
-  if (typeof window === 'undefined') return defaultSalaryRequests
-  const stored = localStorage.getItem('demo_salary_requests')
+export function getDemoStaffPayments(): DemoStaffPayment[] {
+  if (typeof window === 'undefined') return defaultStaffPayments
+  const stored = localStorage.getItem('demo_staff_payments')
   if (!stored) {
-    localStorage.setItem('demo_salary_requests', JSON.stringify(defaultSalaryRequests))
-    return defaultSalaryRequests
+    localStorage.setItem('demo_staff_payments', JSON.stringify(defaultStaffPayments))
+    return defaultStaffPayments
   }
   return JSON.parse(stored)
 }
 
-export function saveDemoSalaryRequests(data: DemoSalaryRequest[]) {
+export function saveDemoStaffPayments(data: DemoStaffPayment[]) {
   if (typeof window === 'undefined') return
-  localStorage.setItem('demo_salary_requests', JSON.stringify(data))
+  localStorage.setItem('demo_staff_payments', JSON.stringify(data))
 }
 
 export function getDemoWorkLogs(): DemoWorkLog[] {

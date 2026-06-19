@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/utils/supabase/client'
-import { isDemoMode, getDemoEvents, saveDemoEvents, getDemoEnquiries, saveDemoEnquiries, getDemoBookings, saveDemoBookings } from '@/utils/supabase/demo'
+import { isDemoMode, getDemoEvents, saveDemoEvents, getDemoEnquiries, saveDemoEnquiries, getDemoBookings, saveDemoBookings, getDemoWorkLogs, saveDemoWorkLogs } from '@/utils/supabase/demo'
 import { MultiDatePicker, parseEventDates, formatMultiDates } from '@/components/MultiDatePicker'
 import { 
   Plus, 
@@ -172,6 +172,13 @@ export default function CalendarPage() {
   // Role & Session State
   const [userRole, setUserRole] = useState<'admin' | 'staff' | null>(null)
   const [staffSession, setStaffSession] = useState<{ id: string; name: string } | null>(null)
+  const [workLogs, setWorkLogs] = useState<any[]>([])
+  const [isLoggingWork, setIsLoggingWork] = useState(false)
+  const [logWorkNote, setLogWorkNote] = useState('')
+  const [logWorkDate, setLogWorkDate] = useState('')
+  const [editingWorkLogId, setEditingWorkLogId] = useState<string | null>(null)
+  const [editingWorkLogNote, setEditingWorkLogNote] = useState('')
+  const [activeLoggingEventId, setActiveLoggingEventId] = useState<string | null>(null)
 
   // Date states
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -224,6 +231,8 @@ export default function CalendarPage() {
     if (isDemoMode()) {
       const demoEvents = getDemoEvents()
       const demoEnquiries = getDemoEnquiries()
+      const demoWorkLogs = getDemoWorkLogs()
+      setWorkLogs(demoWorkLogs)
       const enriched = demoEvents.map(evt => {
         const enq = evt.enquiry_id ? demoEnquiries.find(e => e.id === evt.enquiry_id) : null
         if (enq) {
@@ -262,15 +271,20 @@ export default function CalendarPage() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('calendar_events')
-        .select('*, enquiries(id, name, package, agreed_price, notes, location, status)')
-        .order('event_date', { ascending: true })
+      const [eventsRes, workLogsRes] = await Promise.all([
+        supabase
+          .from('calendar_events')
+          .select('*, enquiries(id, name, package, agreed_price, notes, location, status)')
+          .order('event_date', { ascending: true }),
+        supabase
+          .from('work_log')
+          .select('*')
+      ])
 
-      if (error) {
-        setErrorMsg(error.message)
+      if (eventsRes.error) {
+        setErrorMsg(eventsRes.error.message)
       } else {
-        const enriched = (data || []).map(evt => {
+        const enriched = (eventsRes.data || []).map(evt => {
           if (evt.enquiry_id) {
             return evt
           } else {
@@ -290,6 +304,12 @@ export default function CalendarPage() {
           }
         })
         setEvents(enriched as any)
+      }
+
+      if (workLogsRes.error) {
+        console.error('Failed to fetch work logs:', workLogsRes.error.message)
+      } else {
+        setWorkLogs(workLogsRes.data || [])
       }
     } catch (err: any) {
       setErrorMsg('Failed to load calendar events.')
@@ -983,6 +1003,111 @@ export default function CalendarPage() {
     }
   }
 
+  const handleConfirmWorkLog = async (dateStr: string, noteStr: string) => {
+    if (!editingEvent || !staffSession) return
+
+    const wlTitle = editingEvent.title || 'Untitled Shoot'
+    
+    if (isDemoMode()) {
+      const demoLogs = getDemoWorkLogs()
+      const newLog = {
+        id: 'work-' + Date.now(),
+        staff_id: staffSession.id,
+        event_id: editingEvent.id,
+        event_title: wlTitle,
+        event_date: dateStr,
+        note: noteStr.trim() || null,
+        status: 'pending' as const,
+        payment_id: null,
+        created_at: new Date().toISOString()
+      }
+      const updated = [newLog, ...demoLogs]
+      saveDemoWorkLogs(updated)
+      setWorkLogs(updated)
+      showToast('Shift work logged successfully', 'success')
+      setIsLoggingWork(false)
+      setLogWorkNote('')
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('work_log')
+        .insert({
+          staff_id: staffSession.id,
+          event_id: editingEvent.id,
+          event_title: wlTitle,
+          event_date: dateStr,
+          note: noteStr.trim() || null,
+          status: 'pending'
+        })
+        .select('*')
+        .single()
+      
+      if (error) throw error
+      if (data) {
+        setWorkLogs(prev => [data, ...prev])
+      }
+      showToast('Shift work logged successfully', 'success')
+      setIsLoggingWork(false)
+      setLogWorkNote('')
+    } catch (e: any) {
+      alert('Failed to log work: ' + e.message)
+    }
+  }
+
+  const handleUpdateWorkLog = async (logId: string, noteStr: string) => {
+    if (isDemoMode()) {
+      const demoLogs = getDemoWorkLogs()
+      const updated = demoLogs.map(l => l.id === logId ? { ...l, note: noteStr.trim() || null } : l)
+      saveDemoWorkLogs(updated)
+      setWorkLogs(updated)
+      showToast('Work log updated', 'success')
+      setEditingWorkLogId(null)
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('work_log')
+        .update({ note: noteStr.trim() || null })
+        .eq('id', logId)
+      
+      if (error) throw error
+      setWorkLogs(prev => prev.map(l => l.id === logId ? { ...l, note: noteStr.trim() || null } : l))
+      showToast('Work log updated', 'success')
+      setEditingWorkLogId(null)
+    } catch (e: any) {
+      alert('Failed to update work log: ' + e.message)
+    }
+  }
+
+  const handleRemoveWorkLog = async (logId: string) => {
+    if (!confirm('Are you sure you want to remove this work log?')) return
+
+    if (isDemoMode()) {
+      const demoLogs = getDemoWorkLogs()
+      const updated = demoLogs.filter(l => l.id !== logId)
+      saveDemoWorkLogs(updated)
+      setWorkLogs(updated)
+      showToast('Work log removed', 'delete')
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('work_log')
+        .delete()
+        .eq('id', logId)
+      
+      if (error) throw error
+      setWorkLogs(prev => prev.filter(l => l.id !== logId))
+      showToast('Work log removed', 'delete')
+    } catch (e: any) {
+      alert('Failed to remove work log: ' + e.message)
+    }
+  }
+
   const handleDeleteEvent = (id: string) => {
     const evt = events.find(e => e.id === id)
     if (evt) {
@@ -1635,7 +1760,7 @@ export default function CalendarPage() {
                           </div>
                         )}
 
-                        {/* View details link */}
+                         {/* View details link */}
                         {evt.enquiry_id && (
                           <div className="pt-1.5">
                             <Link
@@ -1647,6 +1772,129 @@ export default function CalendarPage() {
                             </Link>
                           </div>
                         )}
+
+                        {/* Staff Shift Payout Logging Section (Agenda Card) */}
+                        {userRole === 'staff' && staffSession && (() => {
+                          const existingLog = workLogs.find(wl => wl.staff_id === staffSession.id && wl.event_id === evt.id && wl.event_date === selectedDateStr)
+                          
+                          return (
+                            <div className="pt-2 border-t border-border-base/40 mt-3">
+                              {existingLog ? (
+                                <div className="p-2.5 bg-emerald-500/5 border border-emerald-500/20 rounded-lg space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                      ✓ Logged work on {dbDateToDisplayDate(selectedDateStr)}
+                                      {existingLog.status === 'paid' && (
+                                        <span className="ml-1.5 inline-flex items-center rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-450 border border-emerald-500/20 font-bold uppercase tracking-widest text-[8px] px-1 py-0.1">
+                                          PAID
+                                        </span>
+                                      )}
+                                    </span>
+                                    {existingLog.status !== 'paid' && editingWorkLogId !== existingLog.id && (
+                                      <div className="flex gap-2 text-[10px] font-bold">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setEditingWorkLogId(existingLog.id)
+                                            setEditingWorkLogNote(existingLog.note || '')
+                                          }}
+                                          className="text-indigo-500 dark:text-indigo-400 hover:underline cursor-pointer"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveWorkLog(existingLog.id)}
+                                          className="text-red-500 hover:underline cursor-pointer"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {editingWorkLogId === existingLog.id ? (
+                                    <div className="space-y-1.5">
+                                      <input
+                                        type="text"
+                                        value={editingWorkLogNote}
+                                        onChange={(e) => setEditingWorkLogNote(e.target.value)}
+                                        placeholder="What did you do?"
+                                        className="w-full rounded-md border border-input-border bg-input-base px-2 py-1 text-[11px] text-txt-primary"
+                                      />
+                                      <div className="flex gap-1.5 justify-end">
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingWorkLogId(null)}
+                                          className="px-2 py-0.5 text-[9px] text-txt-secondary hover:text-txt-primary cursor-pointer"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleUpdateWorkLog(existingLog.id, editingWorkLogNote)}
+                                          className="px-2 py-0.5 text-[9px] text-white bg-indigo-600 rounded font-bold cursor-pointer"
+                                        >
+                                          Save
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    existingLog.note && <div className="text-[11px] text-txt-secondary italic pl-2 border-l border-emerald-500/30">"{existingLog.note}"</div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div>
+                                  {activeLoggingEventId === evt.id ? (
+                                    <div className="bg-sidebar-active/20 border border-border-base rounded-lg p-2.5 space-y-2">
+                                      <span className="text-[9px] font-extrabold text-txt-muted uppercase tracking-wider block">
+                                        Log work for {dbDateToDisplayDate(selectedDateStr)}
+                                      </span>
+                                      <input
+                                        type="text"
+                                        placeholder="What did you do? (optional)"
+                                        value={logWorkNote}
+                                        onChange={(e) => setLogWorkNote(e.target.value)}
+                                        className="w-full rounded-md border border-input-border bg-input-base px-2 py-1 text-[11px] text-txt-primary"
+                                      />
+                                      <div className="flex gap-1.5 justify-end">
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveLoggingEventId(null)}
+                                          className="px-2 py-0.5 text-[10px] text-txt-secondary hover:text-txt-primary cursor-pointer"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            handleConfirmWorkLog(selectedDateStr, logWorkNote)
+                                            setActiveLoggingEventId(null)
+                                          }}
+                                          className="px-3 py-0.5 bg-txt-primary text-bg-base rounded text-[10px] font-bold hover:opacity-90 cursor-pointer"
+                                        >
+                                          Confirm
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveLoggingEventId(evt.id)
+                                        setLogWorkNote('')
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-500 hover:text-indigo-400 hover:underline cursor-pointer"
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                      <span>I worked on this</span>
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
                   )
@@ -2007,6 +2255,174 @@ export default function CalendarPage() {
                   className="block w-full rounded-lg border border-input-border bg-input-base px-3.5 py-2.5 text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary sm:text-sm font-medium leading-relaxed transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                 />
               </div>
+
+              {/* Staff Log My Shift Work Section */}
+              {userRole === 'staff' && staffSession && (() => {
+                const loggedShifts = workLogs.filter(wl => wl.staff_id === staffSession.id && wl.event_id === editingEvent.id)
+                const eventDates = getEventActiveDates(editingEvent)
+                const loggedDates = loggedShifts.map(wl => wl.event_date)
+                const unloggedDates = eventDates.filter(d => !loggedDates.includes(d))
+
+                return (
+                  <div className="border-t border-border-base/50 pt-6 mt-6 space-y-4">
+                    <h3 className="text-xs font-bold text-txt-secondary uppercase tracking-wider">Log My Shift Work</h3>
+                    
+                    {/* Existing Logged Shifts list */}
+                    {loggedShifts.length > 0 && (
+                      <div className="space-y-3">
+                        {loggedShifts.map(wl => {
+                          const isEditingThisLog = editingWorkLogId === wl.id
+                          return (
+                            <div key={wl.id} className="p-3 border border-emerald-500/25 bg-emerald-500/5 rounded-xl text-xs space-y-2">
+                              <div className="flex items-start justify-between">
+                                <div className="font-semibold text-txt-primary">
+                                  ✓ You logged work on {dbDateToDisplayDate(wl.event_date)}
+                                  {wl.status === 'paid' && (
+                                    <span className="ml-2 inline-flex items-center rounded-md px-1.5 py-0.2 bg-emerald-500/15 text-emerald-600 dark:text-emerald-450 border border-emerald-500/20 font-bold uppercase tracking-widest text-[8px]">
+                                      PAID
+                                    </span>
+                                  )}
+                                </div>
+                                {wl.status !== 'paid' && !isEditingThisLog && (
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingWorkLogId(wl.id)
+                                        setEditingWorkLogNote(wl.note || '')
+                                      }}
+                                      className="text-indigo-500 dark:text-indigo-450 hover:underline font-bold cursor-pointer"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveWorkLog(wl.id)}
+                                      className="text-red-500 hover:underline font-bold cursor-pointer"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {isEditingThisLog ? (
+                                <div className="space-y-2 pt-1">
+                                  <input
+                                    type="text"
+                                    value={editingWorkLogNote}
+                                    onChange={(e) => setEditingWorkLogNote(e.target.value)}
+                                    placeholder="e.g. 2nd shooter, edited the reel"
+                                    className="w-full rounded-lg border border-input-border bg-input-base px-3 py-1.5 text-xs text-txt-primary placeholder-txt-muted focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary font-medium"
+                                  />
+                                  <div className="flex gap-2 justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingWorkLogId(null)}
+                                      className="px-2.5 py-1 text-[11px] font-semibold text-txt-secondary hover:text-txt-primary bg-sidebar-active/30 rounded cursor-pointer"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateWorkLog(wl.id, editingWorkLogNote)}
+                                      className="px-2.5 py-1 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded cursor-pointer"
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                wl.note && <div className="text-txt-secondary italic pl-3 border-l-2 border-emerald-500/30 font-medium">"{wl.note}"</div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Button to show logging form */}
+                    {unloggedDates.length > 0 && (
+                      <>
+                        {!isLoggingWork ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsLoggingWork(true)
+                              setLogWorkDate(unloggedDates[0])
+                              setLogWorkNote('')
+                            }}
+                            className="w-full py-2 border border-dashed border-border-base hover:border-txt-primary rounded-xl text-xs font-bold text-txt-secondary hover:text-txt-primary transition-all flex items-center justify-center gap-1.5 cursor-pointer bg-card-base hover:bg-sidebar-active/20"
+                          >
+                            <Plus className="h-4 w-4" />
+                            <span>I worked on this</span>
+                          </button>
+                        ) : (
+                          <div className="p-4 border border-border-base rounded-xl space-y-4 bg-sidebar-active/10">
+                            <div className="flex items-center justify-between border-b border-border-base/50 pb-2">
+                              <span className="text-xs font-bold text-txt-primary">Log Shift Details</span>
+                              <button
+                                type="button"
+                                onClick={() => setIsLoggingWork(false)}
+                                className="text-txt-muted hover:text-txt-primary"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+
+                            {unloggedDates.length > 1 && (
+                              <div>
+                                <label className="block text-[10px] font-extrabold text-txt-muted uppercase tracking-wider mb-1">
+                                  Select Event Date
+                                </label>
+                                <select
+                                  value={logWorkDate}
+                                  onChange={(e) => setLogWorkDate(e.target.value)}
+                                  className="block w-full rounded-lg border border-input-border bg-input-base px-2.5 py-1.5 text-xs text-txt-primary focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary font-bold cursor-pointer"
+                                >
+                                  {unloggedDates.map(d => (
+                                    <option key={d} value={d}>{dbDateToDisplayDate(d)}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-txt-muted uppercase tracking-wider mb-1">
+                                What did you do? (optional)
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. 2nd shooter, edited the reel"
+                                value={logWorkNote}
+                                onChange={(e) => setLogWorkNote(e.target.value)}
+                                className="w-full rounded-lg border border-input-border bg-input-base px-3 py-2 text-xs text-txt-primary placeholder-txt-muted focus:border-txt-primary focus:outline-hidden focus:ring-1 focus:ring-txt-primary font-semibold"
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-base/50">
+                              <button
+                                type="button"
+                                onClick={() => setIsLoggingWork(false)}
+                                className="px-3 py-1.5 border border-border-base text-txt-secondary hover:text-txt-primary rounded-lg text-[11px] font-semibold hover:bg-sidebar-active/20 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmWorkLog(logWorkDate || unloggedDates[0], logWorkNote)}
+                                className="px-4 py-1.5 bg-txt-primary text-bg-base rounded-lg text-[11px] font-bold shadow hover:opacity-90 transition-all cursor-pointer"
+                              >
+                                Confirm
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Footer with actions */}
